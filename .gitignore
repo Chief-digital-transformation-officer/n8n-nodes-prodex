@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.npmrc
+.DS_Store
+.n8n/
+Landing page/site/node_modules/
+Landing page/site/.next/
+Landing page/site/out/
+debug-*.log
+*.tgz
+Landing page/site/.git

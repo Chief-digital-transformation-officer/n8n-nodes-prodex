@@ -1,0 +1,75 @@
+{
+  "name": "n8n-nodes-prodex",
+  "version": "0.4.0",
+  "description": "Self-hosted n8n ProDex node via ChatGPT subscription device-code auth",
+  "license": "MIT",
+  "homepage": "https://github.com/your-org/n8n-nodes-prodex",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "codex",
+    "prodex",
+    "openai",
+    "ai-agent",
+    "chat-model",
+    "langchain",
+    "self-hosted"
+  ],
+  "author": {
+    "name": "College IT Pro",
+    "email": "collegeitpro@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/n8n-nodes-prodex.git"
+  },
+  "bin": {
+    "n8n-nodes-prodex": "./scripts/device-code-bootstrap.mjs",
+    "prodex-login": "./scripts/device-code-bootstrap.mjs"
+  },
+  "scripts": {
+    "build": "n8n-node build",
+    "build:watch": "tsc --watch",
+    "dev": "n8n-node dev",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "prepublishOnly": "npm run build && npm test",
+    "publish:public": "npm publish --access public",
+    "release": "n8n-node release",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "files": [
+    "dist",
+    "scripts/device-code-bootstrap.mjs"
+  ],
+  "dependencies": {
+    "@n8n/ai-node-sdk": "^0.17.2",
+    "@openai/codex": "0.142.1",
+    "@openai/codex-sdk": "0.142.1"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "strict": false,
+    "credentials": [
+      "dist/credentials/ProDexAuthApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/ProDex/ProDex.node.js",
+      "dist/nodes/ProDexChatModel/ProDexChatModel.node.js",
+      "dist/nodes/ProDexSetup/ProDexSetup.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@n8n/node-cli": "^0.36.2",
+    "@types/node": "^24.5.2",
+    "eslint": "9.29.0",
+    "n8n-workflow": "^2.13.1",
+    "prettier": "3.6.2",
+    "typescript": "5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}

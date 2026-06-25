@@ -1,0 +1,12 @@
+FROM n8nio/n8n:latest
+
+USER root
+
+COPY package.json /custom-nodes/n8n-nodes-nils-codex/package.json
+COPY dist /custom-nodes/n8n-nodes-nils-codex/dist
+COPY scripts/device-code-bootstrap.mjs /custom-nodes/n8n-nodes-nils-codex/scripts/device-code-bootstrap.mjs
+RUN cd /custom-nodes/n8n-nodes-nils-codex && npm install --omit=dev
+
+ENV N8N_CUSTOM_EXTENSIONS=/custom-nodes
+
+USER node
