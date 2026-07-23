@@ -18,14 +18,17 @@ describe('prepareN8nManagement', () => {
     expect(prepared.environment.N8N_HOST).toBe('https://n8n.example.com');
     expect(prepared.environment.N8N_API_KEY).toBe('secret-api-key');
     expect(prepared.environment.N8NAC_ENV_PRODEX_API_KEY).toBe('secret-api-key');
-    expect(prepared.prompt).toContain('invoke the bare n8nac command directly');
-    expect(prepared.prompt).toContain('Never run n8nac through npx');
+    expect(prepared.workflowCli).toContain('/bin/n8nac');
+    expect(prepared.environment.N8NAC_CMD).toBe(prepared.workflowCli);
+    expect(prepared.prompt).toContain('Always invoke it as "$N8NAC_CMD"');
+    expect(prepared.prompt).toContain('never run n8nac through npx');
     expect(config).toContain('n8n.example.com');
     expect(config).not.toContain('secret-api-key');
   });
 
   it('uses the active environment names from an existing n8nac config', () => {
     const workspace = mkdtempSync(join(tmpdir(), 'prodex-existing-'));
+    const codexHome = mkdtempSync(join(tmpdir(), 'prodex-existing-codex-'));
     writeFileSync(
       join(workspace, 'n8nac-config.json'),
       JSON.stringify({
@@ -44,7 +47,7 @@ describe('prepareN8nManagement', () => {
     );
 
     const prepared = prepareN8nManagement(
-      '/unused',
+      codexHome,
       { baseUrl: 'https://n8n.example.com', apiKey: 'key' },
       workspace,
     );
@@ -52,5 +55,6 @@ describe('prepareN8nManagement', () => {
     expect(prepared.environment.N8NAC_ENV_PRODUCTION_API_KEY).toBe('key');
     expect(prepared.environment.N8NAC_ENV_PRODUCTION_EU_API_KEY).toBe('key');
     expect(prepared.environment.N8NAC_TARGET_MAIN_TARGET_API_KEY).toBe('key');
+    expect(prepared.environment.N8NAC_CMD).toBe(prepared.workflowCli);
   });
 });

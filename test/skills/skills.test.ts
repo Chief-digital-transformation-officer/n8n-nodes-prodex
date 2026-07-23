@@ -55,7 +55,7 @@ description: Demo skill
     expect(first[0].changed).toBe(true);
     expect(second[0].changed).toBe(false);
     expect(skill?.description).toContain('n8n');
-    expect(readFileSync(skill!.path, 'utf8')).toContain('n8nac');
+    expect(readFileSync(skill!.path, 'utf8')).toContain('"$N8NAC_CMD"');
     expect(readFileSync(skill!.path, 'utf8')).not.toContain('{{N8NAC_CMD}}');
   });
 });

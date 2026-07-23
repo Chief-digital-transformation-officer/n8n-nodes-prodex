@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+import { ensureCodexCommandLaunchers } from '../codex/manageCodexCli';
+
 export interface N8nApiCredentialValues {
   baseUrl: string;
   apiKey: string;
@@ -10,6 +12,8 @@ export interface PreparedN8nManagement {
   baseUrl: string;
   workingDirectory: string;
   environment: Record<string, string>;
+  workflowCli: string;
+  dataTablesCli: string;
   prompt: string;
 }
 
@@ -124,6 +128,7 @@ export function prepareN8nManagement(
   const workingDirectory = resolve(
     requestedWorkingDirectory?.trim() || join(codexHome, 'n8n-as-code'),
   );
+  const launchers = ensureCodexCommandLaunchers(codexHome);
   mkdirSync(workingDirectory, { recursive: true, mode: 0o700 });
   mkdirSync(join(workingDirectory, 'workflows'), { recursive: true, mode: 0o700 });
 
@@ -141,6 +146,8 @@ export function prepareN8nManagement(
     N8N_HOST: baseUrl,
     N8N_API_KEY: apiKey,
     PRODEX_N8N_BASE_URL: baseUrl,
+    N8NAC_CMD: launchers.n8nacCommand,
+    N8N_DATA_TABLES_CMD: launchers.dataTablesCommand,
   };
   addCredentialEnvironmentVariables(environment, config, apiKey);
 
@@ -148,13 +155,17 @@ export function prepareN8nManagement(
     baseUrl,
     workingDirectory,
     environment,
+    workflowCli: launchers.n8nacCommand,
+    dataTablesCli: launchers.dataTablesCommand,
     prompt: [
       `The n8n instance at ${baseUrl} is already authenticated for this run.`,
-      'Performance rule: invoke the bare n8nac command directly. Never run n8nac through npx, npm exec, pnpm dlx, bunx, or a package installer; ProDex already provides an optimized n8nac launcher on PATH.',
-      'If the bare n8nac command cannot start, report that ProDex launcher failure immediately instead of downloading another copy or retrying through npx.',
-      'Use n8nac for workflow discovery, pull, edit, push, activation, execution inspection, and validation.',
-      'Use n8n-data-tables for native Data Tables CRUD; run n8n-data-tables --help for exact commands.',
-      'Start with n8nac env status --json when workflow context is needed. Do not run n8nac update-ai unless the user asks to regenerate AI context.',
+      `The exact workflow CLI executable is ${JSON.stringify(launchers.n8nacCommand)} and is also available as N8NAC_CMD. Always invoke it as "$N8NAC_CMD"; do not rely on PATH lookup.`,
+      `The exact Data Tables CLI executable is ${JSON.stringify(launchers.dataTablesCommand)} and is also available as N8N_DATA_TABLES_CMD. Always invoke it as "$N8N_DATA_TABLES_CMD".`,
+      'Performance rule: never run n8nac through npx, npm exec, pnpm dlx, bunx, or a package installer. ProDex already provides the optimized executable.',
+      'If "$N8NAC_CMD" cannot start, report a ProDex launcher failure immediately instead of downloading another copy or retrying through npx.',
+      'Use "$N8NAC_CMD" for workflow discovery, pull, edit, push, activation, execution inspection, and validation.',
+      'Use "$N8N_DATA_TABLES_CMD" for native Data Tables CRUD; run "$N8N_DATA_TABLES_CMD" --help for exact commands.',
+      'Start with "$N8NAC_CMD" env status --json when workflow context is needed. Do not run "$N8NAC_CMD" update-ai unless the user asks to regenerate AI context.',
       'Never print, echo, or expose n8n API-key environment variables.',
     ].join('\n'),
   };

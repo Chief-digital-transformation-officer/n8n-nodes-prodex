@@ -119,8 +119,8 @@ function loadBundledN8nArchitectSkill(): { content: string; source: string } {
       SKILL_FILE,
     );
     const content = readFileSync(source, 'utf8')
-      .replaceAll('{{N8NAC_CMD}}', 'n8nac')
-      .replaceAll('{{N8NAC_SKILLS_CMD}}', 'n8nac skills')
+      .replaceAll('{{N8NAC_CMD}}', '"$N8NAC_CMD"')
+      .replaceAll('{{N8NAC_SKILLS_CMD}}', '"$N8NAC_CMD" skills')
       .replaceAll('{{N8N_MANAGER_CMD}}', 'npx --yes @n8n-as-code/n8n-manager')
       .replaceAll(
         '{{N8NAC_CONTEXT_ROOT_HINT}}',

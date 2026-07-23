@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-prodex",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Self-hosted n8n ProDex node via ChatGPT subscription device-code auth",
   "license": "MIT",
   "homepage": "https://prodex.proday.in",

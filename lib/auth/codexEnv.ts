@@ -252,7 +252,8 @@ export function buildCodexEnv(codexHome: string): Record<string, string> {
       ? (Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'Path')
       : 'PATH';
   const n8nacBinDirectory = resolveN8nacBinDirectory();
-  const commandBinDirectory = ensureCodexCommandLaunchers(codexHome).binDirectory;
+  const launchers = ensureCodexCommandLaunchers(codexHome);
+  const commandBinDirectory = launchers.binDirectory;
   const pathEntries = (env[pathKey] ?? '')
     .split(delimiter)
     .filter(
@@ -260,6 +261,10 @@ export function buildCodexEnv(codexHome: string): Record<string, string> {
         entry && entry !== n8nacBinDirectory && entry !== commandBinDirectory,
     );
   env[pathKey] = [commandBinDirectory, n8nacBinDirectory, ...pathEntries].join(delimiter);
+  // These absolute paths are the authoritative commands for agent shells. PATH is
+  // still populated for convenience, but some container/login shells rebuild it.
+  env.N8NAC_CMD = launchers.n8nacCommand;
+  env.N8N_DATA_TABLES_CMD = launchers.dataTablesCommand;
   // CODEX_ACCESS_TOKEN is for enterprise Codex access / agent-identity tokens, not
   // OAuth access tokens from ChatGPT device login. Passing OAuth tokens here makes
   // codex exec fail with "agent identity JWT payload is not valid JSON".

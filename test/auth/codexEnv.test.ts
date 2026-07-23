@@ -177,6 +177,8 @@ describe('codexEnv', () => {
     expect(env.PATH).toContain('/tmp/codex-home/bin');
     expect(env.PATH).toContain('node_modules/.bin');
     expect(env.PATH).toContain('/usr/bin');
+    expect(env.N8NAC_CMD).toBe('/tmp/codex-home/bin/n8nac');
+    expect(env.N8N_DATA_TABLES_CMD).toBe('/tmp/codex-home/bin/n8n-data-tables');
 
     delete process.env.CODEX_ACCESS_TOKEN;
   });

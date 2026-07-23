@@ -249,8 +249,8 @@ export class ProDexSetup implements INodeType {
                 n8nAsCodeWorkspace: management.workingDirectory,
                 workflowsApi: 'available',
                 dataTablesApi: 'available',
-                workflowCli: 'n8nac',
-                dataTablesCli: 'n8n-data-tables',
+                workflowCli: management.workflowCli,
+                dataTablesCli: management.dataTablesCli,
                 sandbox: 'full_access',
                 instructions:
                   'Connection is ready. Select this same ProDex n8n API credential on ProDex or ProDex Chat Model; Codex will be connected automatically.',
