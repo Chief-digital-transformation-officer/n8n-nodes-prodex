@@ -1,4 +1,5 @@
 import type { CodexAgentResult, RunCodexAgentParams } from '../types/codex';
+import { CodexAgentTimeoutError } from '../errors';
 import {
   buildCodexEnv,
   createCodexHome,
@@ -8,6 +9,9 @@ import {
 import { prependRuntimePath, resolveActiveCodexRuntime } from './manageCodexCli';
 
 type CodexSdkModule = typeof import('@openai/codex-sdk');
+type CodexSdkReasoningEffort = import('@openai/codex-sdk').ModelReasoningEffort;
+
+export const DEFAULT_CODEX_AGENT_TIMEOUT_MS = 900_000;
 
 async function loadCodexSdk(): Promise<CodexSdkModule> {
   const importModule = new Function('specifier', 'return import(specifier)') as (
@@ -68,7 +72,9 @@ export async function runCodexAgent(params: RunCodexAgentParams): Promise<CodexA
     sandboxMode: mapSandboxMode(params.sandbox),
     workingDirectory: params.workingDirectory,
     skipGitRepoCheck: true,
-    modelReasoningEffort: params.reasoningEffort,
+    // Codex CLI accepts `none`; the SDK forwards this value to
+    // model_reasoning_effort even though 0.145.0's declaration file lags behind.
+    modelReasoningEffort: params.reasoningEffort as CodexSdkReasoningEffort,
     approvalPolicy: 'never' as const,
     additionalDirectories: params.additionalDirectories,
   };
@@ -83,8 +89,12 @@ export async function runCodexAgent(params: RunCodexAgentParams): Promise<CodexA
   }
 
   const controller = new AbortController();
-  const timeout = params.timeoutMs ?? 300_000;
-  const timeoutHandle = setTimeout(() => controller.abort(), timeout);
+  const timeout = params.timeoutMs ?? DEFAULT_CODEX_AGENT_TIMEOUT_MS;
+  let timeoutTriggered = false;
+  const timeoutHandle = setTimeout(() => {
+    timeoutTriggered = true;
+    controller.abort();
+  }, timeout);
 
   if (params.signal) {
     if (params.signal.aborted) {
@@ -128,6 +138,11 @@ export async function runCodexAgent(params: RunCodexAgentParams): Promise<CodexA
     });
 
     return parseAgentResult(result, thread.id, params.model);
+  } catch (error) {
+    if (timeoutTriggered) {
+      throw new CodexAgentTimeoutError(timeout);
+    }
+    throw error;
   } finally {
     clearTimeout(timeoutHandle);
   }

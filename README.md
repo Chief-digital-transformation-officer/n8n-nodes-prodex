@@ -214,6 +214,8 @@ Skills are stored as `SKILL.md` files under `{codexHome}/skills/{skill-name}/` (
 
 The package pins the published [`n8nac` CLI](https://github.com/EtienneLescot/n8n-as-code/tree/main/packages/cli) as a runtime dependency. Its executable directory is prepended to `PATH` for Codex, so the agent can run `n8nac` without downloading it at execution time.
 
+ProDex also writes stable launchers for `n8nac` and `n8n-data-tables` under `{codexHome}/bin`. This avoids depending on npm's `.bin` symlinks, which may be omitted or hidden by some n8n community-node installation layouts.
+
 The [`n8n-architect` skill](https://github.com/EtienneLescot/n8n-as-code/tree/main/skills) is copied from the installed n8n-as-code package into `codexHome/skills` automatically. It is refreshed when the packaged source changes and is selected by default in both **ProDex** and **ProDex Chat Model**.
 
 ### Install a skill
@@ -274,7 +276,9 @@ Run `n8n-data-tables --help` for the complete command list. Destructive table, c
 5. Choose model, reasoning effort, sandbox, and thread mode
 6. Execute
 
-The current Codex SDK reasoning values exposed by both nodes are `minimal`, `low`, `medium`, `high`, and `xhigh`. `max` and `ultra` are not CLI SDK thread-option values, so they are intentionally not offered here.
+The Codex reasoning values exposed by both nodes are `none`, `minimal`, `low`, `medium`, `high`, and `xhigh`. `max` and `ultra` are not CLI thread-option values, so they are intentionally not offered here.
+
+The default agent timeout is **900 seconds**. Long investigations that inspect many executions may need `1200` seconds under **Options → Timeout (Seconds)**. If the limit is reached, ProDex returns an actionable timeout message instead of the generic `AbortError: The operation was aborted`.
 
 ### Output fields
 
@@ -339,6 +343,7 @@ Codex runtime files, managed CLI versions, and preinstalled skills are stored au
 - Prefer `read_only` sandbox on shared servers
 - Selecting **ProDex N8N API** intentionally enables Full Access for that Codex run; use a least-privilege scoped n8n API key
 - The n8n API key is stored by n8n Credentials and never written into `n8nac-config.json`, but it is available to the Codex child process because both CLIs need it
+- n8n Chat Hub title generation currently recognizes a hard-coded set of built-in model node type names. A ProDex Chat Model can answer the chat normally, but n8n may log `No supported Model nodes found in workflow for title generation`; this is an upstream n8n limitation and does not indicate a failed ProDex response
 - Do not set `OPENAI_API_KEY` in n8n if you want subscription billing; it can override ChatGPT auth in some Codex versions
 
 ---

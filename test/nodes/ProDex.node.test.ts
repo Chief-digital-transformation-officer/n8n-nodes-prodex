@@ -64,7 +64,10 @@ describe('ProDex node', () => {
       (reasoning?.options ?? []).map((option) =>
         typeof option === 'string' ? option : option.value,
       ),
-    ).toEqual(['minimal', 'low', 'medium', 'high', 'xhigh']);
+    ).toEqual(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
     expect(skills?.default).toEqual(['n8n-architect']);
+    const options = node.description.properties?.find((property) => property.name === 'options');
+    const timeout = options?.options?.find((option) => option.name === 'timeoutSeconds');
+    expect(timeout?.default).toBe(900);
   });
 });

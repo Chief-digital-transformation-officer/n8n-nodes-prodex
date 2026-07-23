@@ -1,7 +1,12 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
   buildCodexInstallCommand,
+  ensureCodexCommandLaunchers,
   getCodexRuntimeStatus,
   normalizeCodexVersion,
   resolveBundledCodexRuntime,
@@ -41,5 +46,18 @@ describe('manageCodexCli', () => {
     expect(status.active.source).toBe('bundled');
     expect(status.n8nacVersion).toMatch(/^\d+\.\d+\.\d+/);
     expect(status.n8nacBinDirectory).toContain('node_modules/.bin');
+    expect(status.commandBinDirectory).toContain('prodex-no-managed-runtime');
+  });
+
+  it('creates stable command launchers without relying on npm .bin links', () => {
+    const codexHome = mkdtempSync(join(tmpdir(), 'prodex-launchers-'));
+    const launchers = ensureCodexCommandLaunchers(codexHome);
+
+    expect(execFileSync(launchers.n8nacCommand, ['--version'], { encoding: 'utf8' }).trim()).toBe(
+      '2.4.1',
+    );
+    expect(
+      execFileSync(launchers.dataTablesCommand, ['--help'], { encoding: 'utf8' }),
+    ).toContain('manage native n8n Data Tables');
   });
 });

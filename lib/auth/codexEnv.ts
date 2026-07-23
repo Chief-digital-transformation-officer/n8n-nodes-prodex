@@ -2,7 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir, tmpdir } from 'os';
 import { delimiter, join } from 'path';
 
-import { resolveN8nacBinDirectory } from '../codex/manageCodexCli';
+import {
+  ensureCodexCommandLaunchers,
+  resolveN8nacBinDirectory,
+} from '../codex/manageCodexCli';
 import { CodexAuthSetupError } from '../errors';
 import type { CodexAuthJson, CodexTokenBundle } from '../types/codex';
 import { decodeJwtExpiry, extractAccountId, isValidJwt } from './tokenStore';
@@ -249,10 +252,14 @@ export function buildCodexEnv(codexHome: string): Record<string, string> {
       ? (Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'Path')
       : 'PATH';
   const n8nacBinDirectory = resolveN8nacBinDirectory();
+  const commandBinDirectory = ensureCodexCommandLaunchers(codexHome).binDirectory;
   const pathEntries = (env[pathKey] ?? '')
     .split(delimiter)
-    .filter((entry) => entry && entry !== n8nacBinDirectory);
-  env[pathKey] = [n8nacBinDirectory, ...pathEntries].join(delimiter);
+    .filter(
+      (entry) =>
+        entry && entry !== n8nacBinDirectory && entry !== commandBinDirectory,
+    );
+  env[pathKey] = [commandBinDirectory, n8nacBinDirectory, ...pathEntries].join(delimiter);
   // CODEX_ACCESS_TOKEN is for enterprise Codex access / agent-identity tokens, not
   // OAuth access tokens from ChatGPT device login. Passing OAuth tokens here makes
   // codex exec fail with "agent identity JWT payload is not valid JSON".

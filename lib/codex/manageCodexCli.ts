@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { delimiter, dirname, join } from 'node:path';
 
@@ -29,6 +29,15 @@ export interface CodexRuntimeStatus {
   managedRuntimeHome: string;
   n8nacVersion: string;
   n8nacBinDirectory: string;
+  commandBinDirectory: string;
+}
+
+export interface CodexCommandLaunchers {
+  binDirectory: string;
+  n8nacEntrypoint: string;
+  dataTablesEntrypoint: string;
+  n8nacCommand: string;
+  dataTablesCommand: string;
 }
 
 export interface InstallCodexCliResult extends CodexRuntimeStatus {
@@ -159,6 +168,93 @@ function resolveN8nacPackageJson(): string {
   return nodeRequire.resolve('n8nac/package.json');
 }
 
+export function resolveN8nacEntrypoint(): string {
+  const packageJsonPath = resolveN8nacPackageJson();
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+    bin?: string | Record<string, string>;
+  };
+  const bin =
+    typeof packageJson.bin === 'string'
+      ? packageJson.bin
+      : packageJson.bin?.n8nac ?? Object.values(packageJson.bin ?? {})[0];
+  if (!bin) {
+    throw new CodexRuntimeInstallError('The installed n8nac package has no CLI entrypoint.', {
+      command: '',
+      stdout: '',
+      stderr: '',
+      exitCode: 1,
+    });
+  }
+  return join(dirname(packageJsonPath), bin);
+}
+
+function resolveProdexPackageRoot(): string {
+  let current = __dirname;
+  while (true) {
+    const packageJsonPath = join(current, 'package.json');
+    const dataTablesEntrypoint = join(current, 'scripts', 'n8n-data-tables.mjs');
+    if (existsSync(packageJsonPath) && existsSync(dataTablesEntrypoint)) {
+      try {
+        const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as { name?: string };
+        if (packageJson.name === 'n8n-nodes-prodex') return current;
+      } catch {
+        // Continue walking until the install root is found.
+      }
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      throw new CodexRuntimeInstallError(
+        'Could not locate the bundled n8n-data-tables launcher.',
+        { command: '', stdout: '', stderr: '', exitCode: 1 },
+      );
+    }
+    current = parent;
+  }
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function writeNodeLauncher(commandPath: string, entrypoint: string): void {
+  const content = `#!/bin/sh\nexec ${shellQuote(process.execPath)} ${shellQuote(entrypoint)} "$@"\n`;
+  writeFileSync(commandPath, content, { encoding: 'utf8', mode: 0o700 });
+  chmodSync(commandPath, 0o700);
+}
+
+export function ensureCodexCommandLaunchers(codexHome: string): CodexCommandLaunchers {
+  const binDirectory = join(codexHome, 'bin');
+  mkdirSync(binDirectory, { recursive: true, mode: 0o700 });
+  const n8nacEntrypoint = resolveN8nacEntrypoint();
+  const dataTablesEntrypoint = join(
+    resolveProdexPackageRoot(),
+    'scripts',
+    'n8n-data-tables.mjs',
+  );
+  const n8nacCommand = join(binDirectory, 'n8nac');
+  const dataTablesCommand = join(binDirectory, 'n8n-data-tables');
+
+  if (process.platform === 'win32') {
+    writeFileSync(`${n8nacCommand}.cmd`, `@"${process.execPath}" "${n8nacEntrypoint}" %*\r\n`);
+    writeFileSync(
+      `${dataTablesCommand}.cmd`,
+      `@"${process.execPath}" "${dataTablesEntrypoint}" %*\r\n`,
+    );
+  } else {
+    writeNodeLauncher(n8nacCommand, n8nacEntrypoint);
+    writeNodeLauncher(dataTablesCommand, dataTablesEntrypoint);
+  }
+
+  return {
+    binDirectory,
+    n8nacEntrypoint,
+    dataTablesEntrypoint,
+    n8nacCommand: process.platform === 'win32' ? `${n8nacCommand}.cmd` : n8nacCommand,
+    dataTablesCommand:
+      process.platform === 'win32' ? `${dataTablesCommand}.cmd` : dataTablesCommand,
+  };
+}
+
 export function resolveN8nacBinDirectory(): string {
   return join(dirname(resolveN8nacPackageJson()), '..', '.bin');
 }
@@ -198,6 +294,7 @@ export function getCodexRuntimeStatus(codexHome: string): CodexRuntimeStatus {
     );
   }
   const n8nacPackageJson = resolveN8nacPackageJson();
+  const launchers = ensureCodexCommandLaunchers(codexHome);
   return {
     active,
     bundledVersion,
@@ -205,6 +302,7 @@ export function getCodexRuntimeStatus(codexHome: string): CodexRuntimeStatus {
     managedRuntimeHome: resolveManagedRuntimeHome(codexHome),
     n8nacVersion: readPackageVersion(n8nacPackageJson),
     n8nacBinDirectory: resolveN8nacBinDirectory(),
+    commandBinDirectory: launchers.binDirectory,
   };
 }
 

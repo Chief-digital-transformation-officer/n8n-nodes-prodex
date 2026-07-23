@@ -201,6 +201,7 @@ export class ProDexSetup implements INodeType {
                 managedRuntimeHome: runtime.managedRuntimeHome,
                 n8nacVersion: runtime.n8nacVersion,
                 n8nacBinDirectory: runtime.n8nacBinDirectory,
+                commandBinDirectory: runtime.commandBinDirectory,
                 skillsHome: resolveSkillsHome(codexHome),
                 preinstalledSkills,
               },

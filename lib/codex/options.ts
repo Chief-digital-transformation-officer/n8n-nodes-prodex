@@ -12,6 +12,7 @@ export const CODEX_MODEL_OPTIONS: INodePropertyOptions[] = [
 ];
 
 export const CODEX_REASONING_EFFORT_OPTIONS: INodePropertyOptions[] = [
+  { name: 'None', value: 'none' },
   { name: 'Minimal', value: 'minimal' },
   { name: 'Low', value: 'low' },
   { name: 'Medium', value: 'medium' },

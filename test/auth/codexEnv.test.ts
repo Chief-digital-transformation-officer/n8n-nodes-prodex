@@ -174,6 +174,7 @@ describe('codexEnv', () => {
     const env = buildCodexEnv('/tmp/codex-home');
     expect(env.CODEX_HOME).toBe('/tmp/codex-home');
     expect(env.CODEX_ACCESS_TOKEN).toBeUndefined();
+    expect(env.PATH).toContain('/tmp/codex-home/bin');
     expect(env.PATH).toContain('node_modules/.bin');
     expect(env.PATH).toContain('/usr/bin');
 

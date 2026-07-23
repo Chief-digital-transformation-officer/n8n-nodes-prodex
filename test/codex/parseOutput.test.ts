@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { buildAuthJson, mapSandboxMode } from '../../lib/auth/codexEnv';
 import { isTokenExpired, mergeTokenRefresh, normalizeTokenBundle } from '../../lib/auth/tokenStore';
-import { parseAgentResult } from '../../lib/codex/runAgent';
+import { CodexAgentTimeoutError } from '../../lib/errors';
+import {
+  DEFAULT_CODEX_AGENT_TIMEOUT_MS,
+  parseAgentResult,
+} from '../../lib/codex/runAgent';
 
 describe('tokenStore', () => {
   it('detects expired tokens', () => {
@@ -74,5 +78,14 @@ describe('parseAgentResult', () => {
     expect(parsed.output).toBe('Done');
     expect(parsed.threadId).toBe('thread_123');
     expect(parsed.usage?.totalTokens).toBe(15);
+  });
+});
+
+describe('Codex timeout', () => {
+  it('uses an agentic default and reports an actionable error', () => {
+    expect(DEFAULT_CODEX_AGENT_TIMEOUT_MS).toBe(900_000);
+    expect(new CodexAgentTimeoutError(DEFAULT_CODEX_AGENT_TIMEOUT_MS).message).toContain(
+      'Timeout (Seconds)',
+    );
   });
 });

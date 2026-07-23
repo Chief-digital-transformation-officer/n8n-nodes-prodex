@@ -170,10 +170,12 @@ export class ProDexChatModel implements INodeType {
             displayName: 'Timeout (Seconds)',
             name: 'timeoutSeconds',
             type: 'number',
-            default: 300,
+            default: 900,
             typeOptions: {
               minValue: 30,
             },
+            description:
+              'Maximum Codex run time. Long n8n-as-code investigations often need 10–15 minutes.',
           },
         ],
       },
@@ -247,7 +249,7 @@ export class ProDexChatModel implements INodeType {
         reasoningEffort,
         personality,
         sandbox: effectiveSandbox,
-        timeoutMs: (options.timeoutSeconds ?? 300) * 1000,
+        timeoutMs: (options.timeoutSeconds ?? 900) * 1000,
         systemPrompt,
         staticSkillNames: skills,
         workingDirectory: n8nManagement?.workingDirectory,

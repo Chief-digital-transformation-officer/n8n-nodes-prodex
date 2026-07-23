@@ -22,6 +22,19 @@ export class CodexRequestError extends Error {
   }
 }
 
+export class CodexAgentTimeoutError extends Error {
+  timeoutMs: number;
+
+  constructor(timeoutMs: number) {
+    const timeoutSeconds = Math.round(timeoutMs / 1000);
+    super(
+      `Codex was still working when the ${timeoutSeconds}-second ProDex timeout expired. Increase Options → Timeout (Seconds) for long agentic tasks, or reduce the requested scope.`,
+    );
+    this.name = 'CodexAgentTimeoutError';
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 export class SkillCliInstallError extends Error {
   command: string;
   stdout: string;
