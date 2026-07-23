@@ -71,6 +71,7 @@ export interface RunCodexAgentParams {
   codexHome: string;
   additionalDirectories?: string[];
   environment?: Record<string, string>;
+  allowedEnvironmentVariables?: string[];
 }
 
 export interface AgentIdentityAuthRecord {

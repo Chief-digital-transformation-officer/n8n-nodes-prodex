@@ -251,6 +251,10 @@ Use **ProDex** → **Check Installed Packages** later to run checks such as `pyt
 
 User-level dependency locations are stored under `{codexHome}/dependencies` and added to `PATH` and the relevant package-manager environment variables for every standalone ProDex and ProDex Chat Model run. In particular, plain `pip install` from **Install Packages** is redirected to the persistent Python user base, and global npm installs use the persistent npm prefix. The same prefix exposes `lib`, `lib64`, `include`, pkg-config, and CMake paths for user-space native libraries. Mount the n8n user folder as a volume to preserve these dependencies across container replacement.
 
+ProDex disables login-shell semantics for Codex tool commands and pins the persistent dependency paths through Codex's shell environment policy. This prevents `/bin/sh -lc` profiles in minimal containers from replacing `PATH` and hiding packages that passed installation verification.
+
+Secrets and API credentials are filtered from Codex shell commands by default. To use a skill that reads selected n8n process environment variables, add **Options → Environment Variable Names** to the ProDex or ProDex Chat Model node and enter names only, for example `AMOCRM_SUBDOMAIN, AMOCRM_TOKEN`. ProDex forwards only the selected names (plus its required runtime variables); values are not copied into node output or Codex configuration arguments. The selected values are still available to agent-run commands, so enable them only for trusted skills and prompts.
+
 > **Security and container note:** free-form commands are equivalent to shell access as the n8n OS user. Use only trusted workflow inputs. Commands such as `apt-get`, `apk`, or `dnf` require the necessary OS permissions, and system-package changes survive only when the underlying host/container filesystem does. For reproducible system libraries, bake them into the n8n image; use this operation primarily for user-space skill dependencies.
 
 ### Use skills in ProDex

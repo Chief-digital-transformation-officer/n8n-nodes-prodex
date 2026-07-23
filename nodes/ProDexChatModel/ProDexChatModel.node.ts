@@ -14,15 +14,13 @@ import {
   CODEX_REASONING_EFFORT_OPTIONS,
   DEFAULT_CODEX_MODEL,
 } from '../../lib/codex/options';
+import { parseEnvironmentVariableNames } from '../../lib/codex/shellEnvironment';
 import {
   CodexAuthRefreshError,
   CodexAuthSetupError,
   CodexRuntimeInstallError,
 } from '../../lib/errors';
-import {
-  prepareN8nManagement,
-  type N8nApiCredentialValues,
-} from '../../lib/n8n/management';
+import { prepareN8nManagement, type N8nApiCredentialValues } from '../../lib/n8n/management';
 import { resolveSkillNames } from '../../lib/skills/buildAgentPrompt';
 import { getInstalledSkillLoadOptions } from '../../lib/skills/skillLoadOptions';
 import { ensurePreinstalledSkills } from '../../lib/skills/skillStore';
@@ -167,6 +165,18 @@ export class ProDexChatModel implements INodeType {
         default: {},
         options: [
           {
+            displayName: 'Environment Variable Names',
+            name: 'environmentVariableNames',
+            type: 'string',
+            typeOptions: {
+              rows: 3,
+            },
+            default: '',
+            placeholder: 'AMOCRM_SUBDOMAIN, AMOCRM_TOKEN',
+            description:
+              'Names only, separated by commas or new lines. Values are read from the n8n process environment and made available to Codex shell commands.',
+          },
+          {
             displayName: 'Timeout (Seconds)',
             name: 'timeoutSeconds',
             type: 'number',
@@ -219,9 +229,7 @@ export class ProDexChatModel implements INodeType {
       } catch {
         n8nCredentials = null;
       }
-      const n8nManagement = n8nCredentials
-        ? prepareN8nManagement(codexHome, n8nCredentials)
-        : null;
+      const n8nManagement = n8nCredentials ? prepareN8nManagement(codexHome, n8nCredentials) : null;
       const model = this.getNodeParameter('model', itemIndex) as string;
       const reasoningEffort = this.getNodeParameter(
         'reasoningEffort',
@@ -230,16 +238,13 @@ export class ProDexChatModel implements INodeType {
       const personality = this.getNodeParameter('personality', itemIndex) as Personality;
       const sandbox = this.getNodeParameter('sandbox', itemIndex) as SandboxMode;
       const effectiveSandbox: SandboxMode = n8nManagement ? 'full_access' : sandbox;
-      const configuredSystemPrompt = this.getNodeParameter(
-        'systemPrompt',
-        itemIndex,
-        '',
-      ) as string;
+      const configuredSystemPrompt = this.getNodeParameter('systemPrompt', itemIndex, '') as string;
       const systemPrompt = [configuredSystemPrompt, n8nManagement?.prompt]
         .filter(Boolean)
         .join('\n\n');
       const skills = resolveSkillNames(this.getNodeParameter('skills', itemIndex, []) as string[]);
       const options = this.getNodeParameter('options', itemIndex, {}) as {
+        environmentVariableNames?: string;
         timeoutSeconds?: number;
       };
 
@@ -254,6 +259,9 @@ export class ProDexChatModel implements INodeType {
         staticSkillNames: skills,
         workingDirectory: n8nManagement?.workingDirectory,
         environment: n8nManagement?.environment,
+        allowedEnvironmentVariables: parseEnvironmentVariableNames(
+          options.environmentVariableNames,
+        ),
       });
 
       return supplyModel(this, chatModel);

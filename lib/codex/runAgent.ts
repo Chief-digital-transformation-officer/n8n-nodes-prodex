@@ -7,6 +7,7 @@ import {
   mapSandboxMode,
 } from '../auth/codexEnv';
 import { prependRuntimePath, resolveActiveCodexRuntime } from './manageCodexCli';
+import { buildCodexProcessConfig } from './shellEnvironment';
 
 type CodexSdkModule = typeof import('@openai/codex-sdk');
 type CodexSdkReasoningEffort = import('@openai/codex-sdk').ModelReasoningEffort;
@@ -60,11 +61,17 @@ export async function runCodexAgent(params: RunCodexAgentParams): Promise<CodexA
   const env = prependRuntimePath(buildCodexEnv(codexHome), runtime.pathDirectories);
   Object.assign(env, params.environment);
   const personalityConfig = mapPersonalityConfig(params.personality);
+  const config = buildCodexProcessConfig({
+    env,
+    personalityConfig,
+    allowedEnvironmentVariables: params.allowedEnvironmentVariables,
+    suppliedEnvironmentVariables: Object.keys(params.environment ?? {}),
+  });
 
   const codex = new Codex({
     codexPathOverride: runtime.executablePath,
     env,
-    config: personalityConfig,
+    config,
   });
 
   const threadOptions = {

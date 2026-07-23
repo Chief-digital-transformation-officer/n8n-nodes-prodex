@@ -181,6 +181,8 @@ describe('codexEnv', () => {
     expect(env.PRODEX_DEPENDENCIES_HOME).toBe('/tmp/codex-home/dependencies');
     expect(env.PYTHONUSERBASE).toBe('/tmp/codex-home/dependencies/python');
     expect(env.NPM_CONFIG_PREFIX).toBe('/tmp/codex-home/dependencies/npm');
+    expect(env.UV_PYTHON_INSTALL_DIR).toBe('/tmp/codex-home/dependencies/uv/python');
+    expect(env.UV_PYTHON_BIN_DIR).toBe('/tmp/codex-home/dependencies/bin');
     expect(env.LD_LIBRARY_PATH).toContain('/tmp/codex-home/dependencies/lib');
     expect(env.CPATH).toContain('/tmp/codex-home/dependencies/include');
     expect(env.PKG_CONFIG_PATH).toContain('/tmp/codex-home/dependencies/lib/pkgconfig');

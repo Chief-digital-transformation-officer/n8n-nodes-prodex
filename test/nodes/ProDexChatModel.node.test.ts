@@ -38,6 +38,10 @@ describe('ProDexChatModel node', () => {
     expect(model?.default).toBe('gpt-5.6-sol');
     const options = node.description.properties?.find((property) => property.name === 'options');
     const timeout = options?.options?.find((option) => option.name === 'timeoutSeconds');
+    const environmentVariableNames = options?.options?.find(
+      (option) => option.name === 'environmentVariableNames',
+    );
     expect(timeout?.default).toBe(600);
+    expect(environmentVariableNames?.default).toBe('');
   });
 });

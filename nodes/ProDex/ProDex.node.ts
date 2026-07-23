@@ -17,6 +17,7 @@ import {
   DEFAULT_CODEX_MODEL,
 } from '../../lib/codex/options';
 import { runCodexAgent } from '../../lib/codex/runAgent';
+import { parseEnvironmentVariableNames } from '../../lib/codex/shellEnvironment';
 import {
   CodexAuthRefreshError,
   CodexAuthSetupError,
@@ -556,6 +557,18 @@ export class ProDex implements INodeType {
               'Expression for per-run skills: skill names (array/string), inline markdown, or [{ name, content }]',
           },
           {
+            displayName: 'Environment Variable Names',
+            name: 'environmentVariableNames',
+            type: 'string',
+            typeOptions: {
+              rows: 3,
+            },
+            default: '',
+            placeholder: 'AMOCRM_SUBDOMAIN, AMOCRM_TOKEN',
+            description:
+              'Names only, separated by commas or new lines. Values are read from the n8n process environment and made available to Codex shell commands. Secret values are never written to node output.',
+          },
+          {
             displayName: 'Structured Output JSON Schema',
             name: 'outputSchema',
             type: 'json',
@@ -799,10 +812,14 @@ export class ProDex implements INodeType {
 
           const options = this.getNodeParameter('options', itemIndex, {}) as {
             dynamicSkills?: unknown;
+            environmentVariableNames?: string;
             outputSchema?: string | IDataObject;
             streamProgress?: boolean;
             timeoutSeconds?: number;
           };
+          const allowedEnvironmentVariables = parseEnvironmentVariableNames(
+            options.environmentVariableNames,
+          );
 
           const requestedWorkingDirectory = this.getNodeParameter(
             'workingDirectory',
@@ -876,6 +893,7 @@ export class ProDex implements INodeType {
             codexHome,
             additionalDirectories: builtPrompt.additionalDirectories,
             environment: n8nManagement?.environment,
+            allowedEnvironmentVariables,
           });
 
           if (threadMode === 'continue' && result.threadId) {
@@ -892,6 +910,7 @@ export class ProDex implements INodeType {
               model: result.model,
               finishReason: result.finishReason,
               appliedSkills: builtPrompt.appliedSkills,
+              passedEnvironmentVariables: allowedEnvironmentVariables,
               n8nManagement: n8nManagement
                 ? {
                     connected: true,

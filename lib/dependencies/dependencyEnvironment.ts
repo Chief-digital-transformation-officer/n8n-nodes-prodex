@@ -99,6 +99,8 @@ export function applyDependencyEnvironment(
   env.PIPX_BIN_DIR = join(dependencyEnvironment.pipxHome, 'bin');
   env.UV_TOOL_DIR = join(dependencyEnvironment.uvToolHome, 'tools');
   env.UV_TOOL_BIN_DIR = join(dependencyEnvironment.uvToolHome, 'bin');
+  env.UV_PYTHON_INSTALL_DIR = join(dependencyEnvironment.uvToolHome, 'python');
+  env.UV_PYTHON_BIN_DIR = dependencyEnvironment.binDirectory;
 
   const globalNodeModules = join(dependencyEnvironment.npmPrefix, 'lib', 'node_modules');
   env.NODE_PATH = [globalNodeModules, env.NODE_PATH].filter(Boolean).join(delimiter);
