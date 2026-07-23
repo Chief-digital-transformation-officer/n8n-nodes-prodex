@@ -1,9 +1,14 @@
 import { spawn } from 'node:child_process';
+import { cpSync, existsSync, mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 import { buildCodexEnv } from '../auth/codexEnv';
 import { SkillCliInstallError } from '../errors';
 import type { InstalledSkill } from './skillStore';
-import { listInstalledSkills, sanitizeSkillName } from './skillStore';
+import { listInstalledSkills, resolveSkillsHome, sanitizeSkillName } from './skillStore';
+
+const SKILL_FILE = 'SKILL.md';
 
 const GITHUB_REPO_PATTERN = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(\/)?$/i;
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -47,7 +52,7 @@ export function buildInstallSkillCommand(params: InstallSkillCliParams): { comma
   const repoUrl = normalizeRepoUrl(params.repoUrl);
   const skillName = sanitizeSkillName(params.skillName);
 
-  const sharedArgs = ['skills', 'add', repoUrl, '--skill', skillName, '-a', 'codex', '-g', '-y'];
+  const sharedArgs = ['skills', 'add', repoUrl, '--skill', skillName, '-a', 'codex', '-y'];
 
   if (params.packageManager === 'pnpm') {
     return {
@@ -118,6 +123,33 @@ function runCommand(
   });
 }
 
+export function resolveCliInstalledSkillDir(codexHome: string, skillName: string): string | null {
+  const candidates = [
+    join(codexHome, '.agents', 'skills', skillName),
+    join(homedir(), '.agents', 'skills', skillName),
+  ];
+
+  for (const dir of candidates) {
+    if (existsSync(join(dir, SKILL_FILE))) {
+      return dir;
+    }
+  }
+
+  return null;
+}
+
+export function syncCliSkillToCodexHome(codexHome: string, skillName: string): boolean {
+  const sourceDir = resolveCliInstalledSkillDir(codexHome, skillName);
+  if (!sourceDir) {
+    return existsSync(join(resolveSkillsHome(codexHome), skillName, SKILL_FILE));
+  }
+
+  const targetDir = join(resolveSkillsHome(codexHome), skillName);
+  mkdirSync(resolveSkillsHome(codexHome), { recursive: true, mode: 0o700 });
+  cpSync(sourceDir, targetDir, { recursive: true, force: true });
+  return existsSync(join(targetDir, SKILL_FILE));
+}
+
 export async function installSkillViaCli(params: InstallSkillCliParams): Promise<InstallSkillCliResult> {
   const skillName = sanitizeSkillName(params.skillName);
   const { command, args } = buildInstallSkillCommand(params);
@@ -133,6 +165,8 @@ export async function installSkillViaCli(params: InstallSkillCliParams): Promise
       { command: commandLine, stdout, stderr, exitCode },
     );
   }
+
+  syncCliSkillToCodexHome(params.codexHome, skillName);
 
   const installed = listInstalledSkills(params.codexHome);
   const skill = installed.find((entry) => entry.name === skillName);

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "amo-crm-api": {
+      "source": "MissiaL/amo-crm-api",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "675c28f76614622bec7149c06e5ca406e7e08a1dbf4c056467eb08c8a84cf43e"
+    }
+  }
+}

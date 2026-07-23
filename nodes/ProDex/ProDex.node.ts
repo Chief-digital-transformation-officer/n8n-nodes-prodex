@@ -184,7 +184,7 @@ export class ProDex implements INodeType {
       },
       {
         displayName:
-          'Installs a skill into codexHome/skills using the skills CLI. n8n-architect from n8n-as-code is already installed.\n\nExample:\nnpx skills add https://github.com/anthropics/skills --skill docx -a codex -g -y',
+          'Installs a skill into codexHome/skills using the skills CLI. n8n-architect from n8n-as-code is already installed.\n\nExample:\nnpx skills add https://github.com/anthropics/skills --skill docx -a codex -y',
         name: 'installSkillNotice',
         type: 'notice',
         default: '',
