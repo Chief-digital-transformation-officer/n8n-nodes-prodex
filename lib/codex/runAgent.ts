@@ -7,7 +7,7 @@ import {
   mapSandboxMode,
 } from '../auth/codexEnv';
 import { prependRuntimePath, resolveActiveCodexRuntime } from './manageCodexCli';
-import { buildCodexProcessConfig } from './shellEnvironment';
+import { buildCodexProcessConfig, findMissingEnvironmentVariables } from './shellEnvironment';
 
 type CodexSdkModule = typeof import('@openai/codex-sdk');
 type CodexSdkReasoningEffort = import('@openai/codex-sdk').ModelReasoningEffort;
@@ -60,6 +60,15 @@ export async function runCodexAgent(params: RunCodexAgentParams): Promise<CodexA
   const runtime = resolveActiveCodexRuntime(codexHome);
   const env = prependRuntimePath(buildCodexEnv(codexHome), runtime.pathDirectories);
   Object.assign(env, params.environment);
+  const missingEnvironmentVariables = findMissingEnvironmentVariables(
+    env,
+    params.allowedEnvironmentVariables,
+  );
+  if (missingEnvironmentVariables.length > 0) {
+    throw new Error(
+      `Selected environment variables are missing or empty in the n8n process: ${missingEnvironmentVariables.join(', ')}. Add them to the environment of every n8n main/worker container that can execute this workflow, then recreate those containers.`,
+    );
+  }
   const personalityConfig = mapPersonalityConfig(params.personality);
   const config = buildCodexProcessConfig({
     env,

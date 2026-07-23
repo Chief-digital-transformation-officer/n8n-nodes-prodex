@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildCodexProcessConfig,
+  findMissingEnvironmentVariables,
   parseEnvironmentVariableNames,
 } from '../../lib/codex/shellEnvironment';
 
@@ -19,6 +20,17 @@ describe('shellEnvironment', () => {
     expect(() => parseEnvironmentVariableNames('$AMOCRM_TOKEN')).toThrow(
       'Invalid environment variable name',
     );
+  });
+
+  it('reports only selected names that are absent without exposing values', () => {
+    expect(
+      findMissingEnvironmentVariables({ AMOCRM_SUBDOMAIN: 'example', AMOCRM_TOKEN: '' }, [
+        'AMOCRM_SUBDOMAIN',
+        'AMOCRM_TOKEN',
+        'MISSING_TOKEN',
+        'MISSING_TOKEN',
+      ]),
+    ).toEqual(['AMOCRM_TOKEN', 'MISSING_TOKEN']);
   });
 
   it('disables login shells and pins the persistent dependency environment', () => {

@@ -271,7 +271,9 @@ Dynamic skills accept:
 - Inline markdown: full SKILL.md text for one-off runs
 - Objects: `[{ "name": "temp", "content": "..." }]`
 
-Output includes `appliedSkills` so you can verify what was loaded.
+Output includes `appliedSkills` and `skillDirectories` so you can verify what was loaded. Relative
+paths in an installed skill are resolved from its own directory, even when the agent works in a
+different n8n management workspace.
 
 ### Workflow and Data Tables commands
 

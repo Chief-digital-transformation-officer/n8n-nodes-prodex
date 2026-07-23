@@ -191,9 +191,10 @@ export function listInstalledSkills(codexHome: string): InstalledSkill[] {
 export function loadInstalledSkill(
   codexHome: string,
   skillName: string,
-): ParsedSkillMarkdown & { name: string } {
+): ParsedSkillMarkdown & { name: string; path: string; directory: string } {
   const name = sanitizeSkillName(skillName);
-  const skillPath = join(resolveSkillsHome(codexHome), name, SKILL_FILE);
+  const directory = join(resolveSkillsHome(codexHome), name);
+  const skillPath = join(directory, SKILL_FILE);
   if (!existsSync(skillPath)) {
     throw new CodexAuthSetupError(
       `Skill "${name}" is not installed. Use ProDex → Install Skill, then List Installed Skills to verify.`,
@@ -205,5 +206,7 @@ export function loadInstalledSkill(
     name,
     description: parsed.description,
     body: parsed.body,
+    path: skillPath,
+    directory,
   };
 }

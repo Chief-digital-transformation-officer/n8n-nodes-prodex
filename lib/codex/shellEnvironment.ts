@@ -92,6 +92,13 @@ export function parseEnvironmentVariableNames(value: unknown): string[] {
   return [...new Set(entries)];
 }
 
+export function findMissingEnvironmentVariables(
+  env: Record<string, string>,
+  names: string[] | undefined,
+): string[] {
+  return [...new Set(names ?? [])].filter((name) => env[name] === undefined || env[name] === '');
+}
+
 export function buildCodexProcessConfig(params: {
   env: Record<string, string>;
   personalityConfig?: Record<string, string>;

@@ -86,8 +86,15 @@ describe('buildAgentPrompt', () => {
     expect(built.prompt).toContain('You are an n8n automation expert.');
     expect(built.prompt).toContain('Skill: lint-fix');
     expect(built.prompt).toContain('Always run lint after edits.');
+    expect(built.prompt).toContain(
+      `Absolute skill directory: ${JSON.stringify(join(codexHome, 'skills', 'lint-fix'))}`,
+    );
+    expect(built.prompt).toContain('Resolve every relative file path in this skill');
     expect(built.prompt).toContain('Fix the failing workflow');
     expect(built.appliedSkills).toEqual(['lint-fix']);
+    expect(built.skillDirectories).toEqual({
+      'lint-fix': join(codexHome, 'skills', 'lint-fix'),
+    });
     expect(built.additionalDirectories.length).toBe(1);
   });
 
@@ -100,6 +107,7 @@ describe('buildAgentPrompt', () => {
 
     expect(built.prompt).toContain('Respond briefly.');
     expect(built.appliedSkills).toEqual(['temp (inline)']);
+    expect(built.skillDirectories).toEqual({});
   });
 
   it('resolves skill names from picker with legacy fallback', () => {

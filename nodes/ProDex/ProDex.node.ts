@@ -910,6 +910,7 @@ export class ProDex implements INodeType {
               model: result.model,
               finishReason: result.finishReason,
               appliedSkills: builtPrompt.appliedSkills,
+              skillDirectories: builtPrompt.skillDirectories,
               passedEnvironmentVariables: allowedEnvironmentVariables,
               n8nManagement: n8nManagement
                 ? {

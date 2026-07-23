@@ -16,6 +16,7 @@ export interface BuildAgentPromptParams {
 export interface BuiltAgentPrompt {
   prompt: string;
   appliedSkills: string[];
+  skillDirectories: Record<string, string>;
   additionalDirectories: string[];
 }
 
@@ -104,9 +105,23 @@ export function parseDynamicSkills(value: unknown): InlineSkill[] {
   return [];
 }
 
+function formatInstalledSkill(skill: ReturnType<typeof loadInstalledSkill>): string {
+  const directory = JSON.stringify(skill.directory);
+  const locationInstructions = [
+    `Absolute skill directory: ${directory}`,
+    `Resolve every relative file path in this skill against ${directory}, regardless of the process working directory.`,
+    `Before running commands that mention relative paths such as \`scripts/...\` or \`references/...\`, either change directory to ${directory} for that command or replace those paths with absolute paths.`,
+  ].join('\n');
+
+  return `## Skill: ${skill.name}\n\n${locationInstructions}${
+    skill.description ? `\n\n${skill.description}` : ''
+  }\n\n${skill.body}`.trim();
+}
+
 export function buildAgentPrompt(params: BuildAgentPromptParams): BuiltAgentPrompt {
   const sections: string[] = [];
   const appliedSkills: string[] = [];
+  const skillDirectories: Record<string, string> = {};
   const staticNames = uniqueStrings(params.staticSkillNames ?? []);
   const dynamicSkills = parseDynamicSkills(params.dynamicSkills);
 
@@ -119,9 +134,8 @@ export function buildAgentPrompt(params: BuildAgentPromptParams): BuiltAgentProm
   for (const skillName of staticNames) {
     const skill = loadInstalledSkill(params.codexHome, skillName);
     appliedSkills.push(skill.name);
-    skillSections.push(
-      `## Skill: ${skill.name}${skill.description ? `\n\n${skill.description}` : ''}\n\n${skill.body}`.trim(),
-    );
+    skillDirectories[skill.name] = skill.directory;
+    skillSections.push(formatInstalledSkill(skill));
   }
 
   for (const skill of dynamicSkills) {
@@ -133,9 +147,8 @@ export function buildAgentPrompt(params: BuildAgentPromptParams): BuiltAgentProm
 
     const installed = loadInstalledSkill(params.codexHome, skill.name);
     appliedSkills.push(installed.name);
-    skillSections.push(
-      `## Skill: ${installed.name}${installed.description ? `\n\n${installed.description}` : ''}\n\n${installed.body}`.trim(),
-    );
+    skillDirectories[installed.name] = installed.directory;
+    skillSections.push(formatInstalledSkill(installed));
   }
 
   if (skillSections.length > 0) {
@@ -148,6 +161,7 @@ export function buildAgentPrompt(params: BuildAgentPromptParams): BuiltAgentProm
   return {
     prompt,
     appliedSkills,
+    skillDirectories,
     additionalDirectories: appliedSkills.length > 0 ? [resolveSkillsHome(params.codexHome)] : [],
   };
 }
