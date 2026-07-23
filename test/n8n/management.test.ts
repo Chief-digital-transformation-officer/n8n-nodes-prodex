@@ -20,7 +20,8 @@ describe('prepareN8nManagement', () => {
     expect(prepared.environment.N8NAC_ENV_PRODEX_API_KEY).toBe('secret-api-key');
     expect(prepared.workflowCli).toContain('/bin/n8nac');
     expect(prepared.environment.N8NAC_CMD).toBe(prepared.workflowCli);
-    expect(prepared.prompt).toContain('Always invoke it as "$N8NAC_CMD"');
+    expect(prepared.prompt).toContain(JSON.stringify(prepared.workflowCli));
+    expect(prepared.prompt).toContain('Always invoke this absolute command');
     expect(prepared.prompt).toContain('never run n8nac through npx');
     expect(config).toContain('n8n.example.com');
     expect(config).not.toContain('secret-api-key');

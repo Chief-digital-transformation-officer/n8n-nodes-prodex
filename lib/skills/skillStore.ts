@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'path';
 
 import { CodexAuthSetupError } from '../errors';
+import { ensureCodexCommandLaunchers } from '../codex/manageCodexCli';
 
 export interface InstalledSkill {
   name: string;
@@ -106,8 +107,10 @@ export function installSkill(
   };
 }
 
-function loadBundledN8nArchitectSkill(): { content: string; source: string } {
+function loadBundledN8nArchitectSkill(codexHome: string): { content: string; source: string } {
   try {
+    const launchers = ensureCodexCommandLaunchers(codexHome);
+    const n8nacCommand = JSON.stringify(launchers.n8nacCommand);
     const n8nacPackageJson = nodeRequire.resolve('n8nac/package.json');
     const n8nacRequire = createRequire(n8nacPackageJson);
     const skillsPackageJson = n8nacRequire.resolve('@n8n-as-code/skills/package.json');
@@ -119,8 +122,8 @@ function loadBundledN8nArchitectSkill(): { content: string; source: string } {
       SKILL_FILE,
     );
     const content = readFileSync(source, 'utf8')
-      .replaceAll('{{N8NAC_CMD}}', '"$N8NAC_CMD"')
-      .replaceAll('{{N8NAC_SKILLS_CMD}}', '"$N8NAC_CMD" skills')
+      .replaceAll('{{N8NAC_CMD}}', n8nacCommand)
+      .replaceAll('{{N8NAC_SKILLS_CMD}}', `${n8nacCommand} skills`)
       .replaceAll('{{N8N_MANAGER_CMD}}', 'npx --yes @n8n-as-code/n8n-manager')
       .replaceAll(
         '{{N8NAC_CONTEXT_ROOT_HINT}}',
@@ -135,7 +138,7 @@ function loadBundledN8nArchitectSkill(): { content: string; source: string } {
 }
 
 export function ensurePreinstalledSkills(codexHome: string): PreinstalledSkillResult[] {
-  const bundled = loadBundledN8nArchitectSkill();
+  const bundled = loadBundledN8nArchitectSkill(codexHome);
   const skillPath = join(resolveSkillsHome(codexHome), PREINSTALLED_N8N_SKILL, SKILL_FILE);
   if (existsSync(skillPath) && readFileSync(skillPath, 'utf8') === bundled.content) {
     const parsed = parseSkillMarkdown(bundled.content);

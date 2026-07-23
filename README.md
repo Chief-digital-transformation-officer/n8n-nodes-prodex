@@ -214,7 +214,7 @@ Skills are stored as `SKILL.md` files under `{codexHome}/skills/{skill-name}/` (
 
 The package pins the published [`n8nac` CLI](https://github.com/EtienneLescot/n8n-as-code/tree/main/packages/cli) as a runtime dependency. Its executable directory is prepended to `PATH` for Codex, so the agent can run `n8nac` without downloading it at execution time.
 
-ProDex also writes stable launchers for `n8nac` and `n8n-data-tables` under `{codexHome}/bin`. This avoids depending on npm's `.bin` symlinks, which may be omitted or hidden by some n8n community-node installation layouts. Every Codex process receives their absolute paths as `N8NAC_CMD` and `N8N_DATA_TABLES_CMD`; the system prompt and preinstalled skill call `"$N8NAC_CMD"` instead of relying on `PATH`. The agent is explicitly forbidden from using the much slower `npx --yes n8nac` fallback.
+ProDex also writes stable launchers for `n8nac` and `n8n-data-tables` under `{codexHome}/bin`. This avoids depending on npm's `.bin` symlinks, which may be omitted or hidden by some n8n community-node installation layouts. Every Codex process also receives their absolute paths as `N8NAC_CMD` and `N8N_DATA_TABLES_CMD`; most importantly, the system prompt and preinstalled skill embed the exact absolute executable paths and never rely on `PATH`. The agent is explicitly forbidden from using the much slower `npx --yes n8nac` fallback.
 
 The [`n8n-architect` skill](https://github.com/EtienneLescot/n8n-as-code/tree/main/skills) is copied from the installed n8n-as-code package into `codexHome/skills` automatically. It is refreshed when the packaged source changes and is selected by default in both **ProDex** and **ProDex Chat Model**.
 

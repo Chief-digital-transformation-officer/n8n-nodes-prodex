@@ -150,6 +150,8 @@ export function prepareN8nManagement(
     N8N_DATA_TABLES_CMD: launchers.dataTablesCommand,
   };
   addCredentialEnvironmentVariables(environment, config, apiKey);
+  const workflowCommand = JSON.stringify(launchers.n8nacCommand);
+  const dataTablesCommand = JSON.stringify(launchers.dataTablesCommand);
 
   return {
     baseUrl,
@@ -159,13 +161,13 @@ export function prepareN8nManagement(
     dataTablesCli: launchers.dataTablesCommand,
     prompt: [
       `The n8n instance at ${baseUrl} is already authenticated for this run.`,
-      `The exact workflow CLI executable is ${JSON.stringify(launchers.n8nacCommand)} and is also available as N8NAC_CMD. Always invoke it as "$N8NAC_CMD"; do not rely on PATH lookup.`,
-      `The exact Data Tables CLI executable is ${JSON.stringify(launchers.dataTablesCommand)} and is also available as N8N_DATA_TABLES_CMD. Always invoke it as "$N8N_DATA_TABLES_CMD".`,
+      `The exact workflow CLI command is ${workflowCommand}. Always invoke this absolute command; do not rely on PATH lookup. N8NAC_CMD points to the same executable for diagnostics only.`,
+      `The exact Data Tables CLI command is ${dataTablesCommand}. Always invoke this absolute command. N8N_DATA_TABLES_CMD points to the same executable for diagnostics only.`,
       'Performance rule: never run n8nac through npx, npm exec, pnpm dlx, bunx, or a package installer. ProDex already provides the optimized executable.',
-      'If "$N8NAC_CMD" cannot start, report a ProDex launcher failure immediately instead of downloading another copy or retrying through npx.',
-      'Use "$N8NAC_CMD" for workflow discovery, pull, edit, push, activation, execution inspection, and validation.',
-      'Use "$N8N_DATA_TABLES_CMD" for native Data Tables CRUD; run "$N8N_DATA_TABLES_CMD" --help for exact commands.',
-      'Start with "$N8NAC_CMD" env status --json when workflow context is needed. Do not run "$N8NAC_CMD" update-ai unless the user asks to regenerate AI context.',
+      `If ${workflowCommand} cannot start, report a ProDex launcher failure immediately instead of downloading another copy or retrying through npx.`,
+      `Use ${workflowCommand} for workflow discovery, pull, edit, push, activation, execution inspection, and validation.`,
+      `Use ${dataTablesCommand} for native Data Tables CRUD; run ${dataTablesCommand} --help for exact commands.`,
+      `Start with ${workflowCommand} env status --json when workflow context is needed. Do not run ${workflowCommand} update-ai unless the user asks to regenerate AI context.`,
       'Never print, echo, or expose n8n API-key environment variables.',
     ].join('\n'),
   };
