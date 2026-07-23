@@ -11,7 +11,7 @@ import { prependRuntimePath, resolveActiveCodexRuntime } from './manageCodexCli'
 type CodexSdkModule = typeof import('@openai/codex-sdk');
 type CodexSdkReasoningEffort = import('@openai/codex-sdk').ModelReasoningEffort;
 
-export const DEFAULT_CODEX_AGENT_TIMEOUT_MS = 900_000;
+export const DEFAULT_CODEX_AGENT_TIMEOUT_MS = 600_000;
 
 async function loadCodexSdk(): Promise<CodexSdkModule> {
   const importModule = new Function('specifier', 'return import(specifier)') as (

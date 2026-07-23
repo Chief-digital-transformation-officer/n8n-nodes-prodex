@@ -214,7 +214,7 @@ Skills are stored as `SKILL.md` files under `{codexHome}/skills/{skill-name}/` (
 
 The package pins the published [`n8nac` CLI](https://github.com/EtienneLescot/n8n-as-code/tree/main/packages/cli) as a runtime dependency. Its executable directory is prepended to `PATH` for Codex, so the agent can run `n8nac` without downloading it at execution time.
 
-ProDex also writes stable launchers for `n8nac` and `n8n-data-tables` under `{codexHome}/bin`. This avoids depending on npm's `.bin` symlinks, which may be omitted or hidden by some n8n community-node installation layouts.
+ProDex also writes stable launchers for `n8nac` and `n8n-data-tables` under `{codexHome}/bin`. This avoids depending on npm's `.bin` symlinks, which may be omitted or hidden by some n8n community-node installation layouts. The agent is explicitly instructed to call bare `n8nac` and never use the much slower `npx --yes n8nac` fallback.
 
 The [`n8n-architect` skill](https://github.com/EtienneLescot/n8n-as-code/tree/main/skills) is copied from the installed n8n-as-code package into `codexHome/skills` automatically. It is refreshed when the packaged source changes and is selected by default in both **ProDex** and **ProDex Chat Model**.
 
@@ -278,7 +278,7 @@ Run `n8n-data-tables --help` for the complete command list. Destructive table, c
 
 The Codex reasoning values exposed by both nodes are `none`, `minimal`, `low`, `medium`, `high`, and `xhigh`. `max` and `ultra` are not CLI thread-option values, so they are intentionally not offered here.
 
-The default agent timeout is **900 seconds**. Long investigations that inspect many executions may need `1200` seconds under **Options → Timeout (Seconds)**. If the limit is reached, ProDex returns an actionable timeout message instead of the generic `AbortError: The operation was aborted`.
+The default agent timeout is **600 seconds (10 minutes)**. Longer investigations can use `900` or `1200` seconds under **Options → Timeout (Seconds)**. If the limit is reached, ProDex returns an actionable timeout message instead of the generic `AbortError: The operation was aborted`.
 
 ### Output fields
 

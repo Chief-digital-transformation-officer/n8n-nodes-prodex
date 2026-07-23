@@ -83,7 +83,7 @@ describe('parseAgentResult', () => {
 
 describe('Codex timeout', () => {
   it('uses an agentic default and reports an actionable error', () => {
-    expect(DEFAULT_CODEX_AGENT_TIMEOUT_MS).toBe(900_000);
+    expect(DEFAULT_CODEX_AGENT_TIMEOUT_MS).toBe(600_000);
     expect(new CodexAgentTimeoutError(DEFAULT_CODEX_AGENT_TIMEOUT_MS).message).toContain(
       'Timeout (Seconds)',
     );

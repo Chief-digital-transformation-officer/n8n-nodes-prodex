@@ -18,6 +18,8 @@ describe('prepareN8nManagement', () => {
     expect(prepared.environment.N8N_HOST).toBe('https://n8n.example.com');
     expect(prepared.environment.N8N_API_KEY).toBe('secret-api-key');
     expect(prepared.environment.N8NAC_ENV_PRODEX_API_KEY).toBe('secret-api-key');
+    expect(prepared.prompt).toContain('invoke the bare n8nac command directly');
+    expect(prepared.prompt).toContain('Never run n8nac through npx');
     expect(config).toContain('n8n.example.com');
     expect(config).not.toContain('secret-api-key');
   });

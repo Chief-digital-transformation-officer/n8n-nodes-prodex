@@ -68,6 +68,6 @@ describe('ProDex node', () => {
     expect(skills?.default).toEqual(['n8n-architect']);
     const options = node.description.properties?.find((property) => property.name === 'options');
     const timeout = options?.options?.find((option) => option.name === 'timeoutSeconds');
-    expect(timeout?.default).toBe(900);
+    expect(timeout?.default).toBe(600);
   });
 });

@@ -150,6 +150,8 @@ export function prepareN8nManagement(
     environment,
     prompt: [
       `The n8n instance at ${baseUrl} is already authenticated for this run.`,
+      'Performance rule: invoke the bare n8nac command directly. Never run n8nac through npx, npm exec, pnpm dlx, bunx, or a package installer; ProDex already provides an optimized n8nac launcher on PATH.',
+      'If the bare n8nac command cannot start, report that ProDex launcher failure immediately instead of downloading another copy or retrying through npx.',
       'Use n8nac for workflow discovery, pull, edit, push, activation, execution inspection, and validation.',
       'Use n8n-data-tables for native Data Tables CRUD; run n8n-data-tables --help for exact commands.',
       'Start with n8nac env status --json when workflow context is needed. Do not run n8nac update-ai unless the user asks to regenerate AI context.',
