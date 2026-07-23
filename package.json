@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-prodex",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Self-hosted n8n ProDex node via ChatGPT subscription device-code auth",
   "license": "MIT",
   "homepage": "https://prodex.proday.in",
@@ -25,7 +25,8 @@
   },
   "bin": {
     "n8n-nodes-prodex": "./scripts/device-code-bootstrap.mjs",
-    "prodex-login": "./scripts/device-code-bootstrap.mjs"
+    "prodex-login": "./scripts/device-code-bootstrap.mjs",
+    "n8n-data-tables": "./scripts/n8n-data-tables.mjs"
   },
   "scripts": {
     "build": "n8n-node build",
@@ -41,7 +42,8 @@
   },
   "files": [
     "dist",
-    "scripts/device-code-bootstrap.mjs"
+    "scripts/device-code-bootstrap.mjs",
+    "scripts/n8n-data-tables.mjs"
   ],
   "dependencies": {
     "@n8n/ai-node-sdk": "^0.17.2",
@@ -53,7 +55,8 @@
     "n8nNodesApiVersion": 1,
     "strict": false,
     "credentials": [
-      "dist/credentials/ProDexAuthApi.credentials.js"
+      "dist/credentials/ProDexAuthApi.credentials.js",
+      "dist/credentials/ProDexN8nApi.credentials.js"
     ],
     "nodes": [
       "dist/nodes/ProDex/ProDex.node.js",

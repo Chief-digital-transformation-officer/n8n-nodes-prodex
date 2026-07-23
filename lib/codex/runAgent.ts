@@ -54,6 +54,7 @@ export async function runCodexAgent(params: RunCodexAgentParams): Promise<CodexA
   const codexHome = params.codexHome || createCodexHome(params.tokenBundle);
   const runtime = resolveActiveCodexRuntime(codexHome);
   const env = prependRuntimePath(buildCodexEnv(codexHome), runtime.pathDirectories);
+  Object.assign(env, params.environment);
   const personalityConfig = mapPersonalityConfig(params.personality);
 
   const codex = new Codex({

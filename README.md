@@ -56,6 +56,8 @@ This project is built and maintained by **[Nils](https://nils.proday.in)**.
 - Thread modes: new, continue, resume
 - **n8n-as-code included** — the `n8nac` CLI is installed with the node and exposed to every Codex run
 - **Preinstalled n8n skill** — `n8n-architect` from n8n-as-code is available and selected by default
+- **Native n8n management connection** — one encrypted n8n API credential automatically authenticates workflow and Data Tables tooling
+- **Native Data Tables CLI** — list/create/rename/delete tables, manage columns, and read/insert/update/upsert/delete rows
 - **Skills system** — install additional `SKILL.md` files and reference them in system prompts (static + dynamic)
 
 ---
@@ -158,6 +160,27 @@ Only needed if you prefer n8n Credentials over disk auth (e.g. multi-worker setu
 | Account ID       | `accountId`                |
 | Expires At       | `expiresAt`                |
 
+### Connect Codex to this n8n instance
+
+This is separate from the ChatGPT/Codex login above. It authorizes Codex to manage the n8n instance itself.
+
+1. In n8n, open **Settings → n8n API** and create an API key with workflow and Data Table scopes.
+2. Create **Credentials → ProDex N8N API**.
+3. Set **n8n Base URL** to a URL reachable from the executing n8n process or worker. For a single-container install, `http://127.0.0.1:5678` is usually correct. In queue mode, use the main n8n service URL.
+4. Paste the API key.
+5. Optional: run **ProDex Setup → Test N8N Management Connection**.
+6. Select the same credential on **ProDex** or **ProDex Chat Model**.
+
+After selection, ProDex automatically:
+
+- creates a persistent n8n-as-code workspace under `{codexHome}/n8n-as-code`;
+- supplies the API key to the current process without writing it to `n8nac-config.json`;
+- exposes `n8nac` for workflow management;
+- exposes `n8n-data-tables` for native Data Tables management;
+- switches the Codex run to `danger-full-access` so local n8n networking works and bubblewrap (`bwrap`) is not started.
+
+The Full Access switch is intentional. In many Docker deployments, Codex `read-only` and `workspace-write` modes need unprivileged Linux namespaces, which causes `bwrap: No permissions to create a new namespace`. Only enable the n8n management credential on a trusted self-hosted instance.
+
 ---
 
 ## Use with n8n AI Agent (Chat Model)
@@ -220,6 +243,25 @@ Dynamic skills accept:
 - Objects: `[{ "name": "temp", "content": "..." }]`
 
 Output includes `appliedSkills` so you can verify what was loaded.
+
+### Workflow and Data Tables commands
+
+With a **ProDex N8N API** credential selected, Codex can use:
+
+```bash
+n8nac env status --json
+n8nac list --remote --json
+n8nac pull WORKFLOW_ID
+n8nac push workflows/example.ts
+
+n8n-data-tables data-tables list
+n8n-data-tables data-tables create --name Leads --columns '[{"name":"email","type":"string"}]'
+n8n-data-tables data-tables columns create TABLE_ID --name score --type number
+n8n-data-tables data-tables rows list TABLE_ID --limit 100
+n8n-data-tables data-tables rows upsert TABLE_ID --filter '{"type":"and","filters":[{"columnName":"email","condition":"eq","value":"a@example.com"}]}' --data '{"email":"a@example.com","score":10}' --return-data
+```
+
+Run `n8n-data-tables --help` for the complete command list. Destructive table, column, clear, and row-delete operations require `--force`; row update/upsert/delete also support `--dry-run` where the n8n API provides it.
 
 ---
 
@@ -295,6 +337,8 @@ Codex runtime files, managed CLI versions, and preinstalled skills are stored au
 
 - Treat credential tokens like passwords
 - Prefer `read_only` sandbox on shared servers
+- Selecting **ProDex N8N API** intentionally enables Full Access for that Codex run; use a least-privilege scoped n8n API key
+- The n8n API key is stored by n8n Credentials and never written into `n8nac-config.json`, but it is available to the Codex child process because both CLIs need it
 - Do not set `OPENAI_API_KEY` in n8n if you want subscription billing; it can override ChatGPT auth in some Codex versions
 
 ---

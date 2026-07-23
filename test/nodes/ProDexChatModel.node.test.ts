@@ -17,6 +17,8 @@ describe('ProDexChatModel node', () => {
     expect(node.description.credentials?.[0]?.displayOptions?.show?.useN8nCredentials).toEqual([
       true,
     ]);
+    expect(node.description.credentials?.[1]?.name).toBe('prodexN8nApi');
+    expect(node.description.credentials?.[1]?.required).toBe(false);
   });
 
   it('shares the current Codex reasoning enum and n8n skill default', () => {

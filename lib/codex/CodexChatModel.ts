@@ -21,6 +21,8 @@ export interface CodexChatModelConfig extends ChatModelConfig {
   systemPrompt?: string;
   staticSkillNames?: string[];
   dynamicSkills?: unknown;
+  workingDirectory?: string;
+  environment?: Record<string, string>;
 }
 
 function preparePrompt(messages: Message[], config: CodexChatModelConfig): ReturnType<typeof buildAgentPrompt> {
@@ -54,6 +56,8 @@ export class CodexChatModel extends BaseChatModel<CodexChatModelConfig> {
       tokenBundle: merged.tokenBundle,
       codexHome: merged.codexHome,
       additionalDirectories: built.additionalDirectories,
+      workingDirectory: merged.workingDirectory,
+      environment: merged.environment,
     });
 
     return {
@@ -113,6 +117,8 @@ export class CodexChatModel extends BaseChatModel<CodexChatModelConfig> {
       tokenBundle: merged.tokenBundle,
       codexHome: merged.codexHome,
       additionalDirectories: built.additionalDirectories,
+      workingDirectory: merged.workingDirectory,
+      environment: merged.environment,
     })
       .then((result) => {
         push({

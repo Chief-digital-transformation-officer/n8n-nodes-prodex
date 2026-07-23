@@ -19,6 +19,10 @@ import {
 } from '../../lib/auth/codexEnv';
 import { getCodexRuntimeStatus, installCodexCli } from '../../lib/codex/manageCodexCli';
 import { CodexAuthSetupError, CodexRuntimeInstallError } from '../../lib/errors';
+import {
+  prepareN8nManagement,
+  type N8nApiCredentialValues,
+} from '../../lib/n8n/management';
 import { ensurePreinstalledSkills, resolveSkillsHome } from '../../lib/skills/skillStore';
 
 export class ProDexSetup implements INodeType {
@@ -43,6 +47,18 @@ export class ProDexSetup implements INodeType {
     },
     inputs: [NodeConnectionTypes.Main],
     outputs: [NodeConnectionTypes.Main],
+    credentials: [
+      {
+        name: 'prodexN8nApi',
+        displayName: 'ProDex N8N API',
+        required: true,
+        displayOptions: {
+          show: {
+            operation: ['testN8nConnection'],
+          },
+        },
+      },
+    ],
     properties: [
       {
         displayName:
@@ -76,6 +92,13 @@ export class ProDexSetup implements INodeType {
             value: 'runtimeStatus',
             description: 'Show active Codex, bundled Codex, n8nac, and preinstalled skill status',
             action: 'Get runtime status',
+          },
+          {
+            name: 'Test N8N Management Connection',
+            value: 'testN8nConnection',
+            description:
+              'Verify workflow and native Data Tables API access and prepare the n8n-as-code workspace',
+            action: 'Test N8N management connection',
           },
           {
             name: 'Export Credential Values',
@@ -180,6 +203,56 @@ export class ProDexSetup implements INodeType {
                 n8nacBinDirectory: runtime.n8nacBinDirectory,
                 skillsHome: resolveSkillsHome(codexHome),
                 preinstalledSkills,
+              },
+            },
+          ],
+        ];
+      }
+
+      if (operation === 'testN8nConnection') {
+        const credentials = (await this.getCredentials(
+          'prodexN8nApi',
+        )) as unknown as N8nApiCredentialValues;
+        const management = prepareN8nManagement(codexHome, credentials);
+        const headers = {
+          Accept: 'application/json',
+          'X-N8N-API-KEY': credentials.apiKey,
+        };
+        const [workflowsResponse, dataTablesResponse] = await Promise.all([
+          fetch(`${management.baseUrl}/api/v1/workflows?limit=1`, { headers }),
+          fetch(`${management.baseUrl}/api/v1/data-tables?limit=1`, { headers }),
+        ]);
+
+        if (!workflowsResponse.ok || !dataTablesResponse.ok) {
+          const failures = [
+            !workflowsResponse.ok
+              ? `workflows API: ${workflowsResponse.status} ${workflowsResponse.statusText}`
+              : '',
+            !dataTablesResponse.ok
+              ? `Data Tables API: ${dataTablesResponse.status} ${dataTablesResponse.statusText}`
+              : '',
+          ].filter(Boolean);
+          throw new NodeOperationError(
+            this.getNode(),
+            `n8n management connection failed (${failures.join('; ')}). Check the base URL, API-key scopes, and n8n version.`,
+          );
+        }
+
+        return [
+          [
+            {
+              json: {
+                operation,
+                connected: true,
+                baseUrl: management.baseUrl,
+                n8nAsCodeWorkspace: management.workingDirectory,
+                workflowsApi: 'available',
+                dataTablesApi: 'available',
+                workflowCli: 'n8nac',
+                dataTablesCli: 'n8n-data-tables',
+                sandbox: 'full_access',
+                instructions:
+                  'Connection is ready. Select this same ProDex n8n API credential on ProDex or ProDex Chat Model; Codex will be connected automatically.',
               },
             },
           ],

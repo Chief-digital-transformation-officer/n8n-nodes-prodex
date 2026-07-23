@@ -37,6 +37,8 @@ describe('ProDex node', () => {
     expect(node.description.credentials?.[0]?.displayOptions?.show?.useN8nCredentials).toEqual([
       true,
     ]);
+    expect(node.description.credentials?.[1]?.name).toBe('prodexN8nApi');
+    expect(node.description.credentials?.[1]?.required).toBe(false);
   });
 
   it('uses current Codex models, reasoning enum, and preinstalled n8n skill', () => {

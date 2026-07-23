@@ -15,4 +15,8 @@ describe('n8n package load', () => {
   it('loads the chat model node module', () => {
     expect(() => require('../dist/nodes/ProDexChatModel/ProDexChatModel.node.js')).not.toThrow();
   });
+
+  it('loads the n8n management credential', () => {
+    expect(() => require('../dist/credentials/ProDexN8nApi.credentials.js')).not.toThrow();
+  });
 });

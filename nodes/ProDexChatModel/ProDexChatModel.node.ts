@@ -19,6 +19,10 @@ import {
   CodexAuthSetupError,
   CodexRuntimeInstallError,
 } from '../../lib/errors';
+import {
+  prepareN8nManagement,
+  type N8nApiCredentialValues,
+} from '../../lib/n8n/management';
 import { resolveSkillNames } from '../../lib/skills/buildAgentPrompt';
 import { getInstalledSkillLoadOptions } from '../../lib/skills/skillLoadOptions';
 import { ensurePreinstalledSkills } from '../../lib/skills/skillStore';
@@ -64,6 +68,11 @@ export class ProDexChatModel implements INodeType {
           },
         },
       },
+      {
+        name: 'prodexN8nApi',
+        displayName: 'ProDex N8N API',
+        required: false,
+      },
     ],
     properties: [
       {
@@ -75,7 +84,7 @@ export class ProDexChatModel implements INodeType {
       },
       {
         displayName:
-          'AI Agent usage\n\n• Connect the Model output to AI Agent → Chat Model.\n• Works well with Chat Trigger for subscription-backed chat.\n• Tool nodes on AI Agent are not fully supported — Codex returns text, not native tool-call payloads. Use the standalone ProDex node for full agentic coding with sandbox access.\n• Prefer Read Only sandbox unless you need filesystem writes.',
+          'AI Agent usage\n\n• Connect the Model output to AI Agent → Chat Model.\n• Works well with Chat Trigger for subscription-backed chat.\n• Select a ProDex n8n API credential to let Codex manage workflows and Data Tables in this n8n. Connected n8n management forces Full Access to avoid bwrap/local-network restrictions in containers.\n• Tool nodes on AI Agent are not fully supported — Codex returns text, not native tool-call payloads. Use the standalone ProDex node for full agentic coding with sandbox access.\n• Prefer Read Only sandbox unless you need filesystem writes.',
         name: 'agentGuide',
         type: 'notice',
         default: '',
@@ -200,6 +209,17 @@ export class ProDexChatModel implements INodeType {
 
       const { activeBundle, codexHome } = await resolveRunnableAuth(fetch, credentials);
       ensurePreinstalledSkills(codexHome);
+      let n8nCredentials: N8nApiCredentialValues | null = null;
+      try {
+        n8nCredentials = (await this.getCredentials(
+          'prodexN8nApi',
+        )) as unknown as N8nApiCredentialValues;
+      } catch {
+        n8nCredentials = null;
+      }
+      const n8nManagement = n8nCredentials
+        ? prepareN8nManagement(codexHome, n8nCredentials)
+        : null;
       const model = this.getNodeParameter('model', itemIndex) as string;
       const reasoningEffort = this.getNodeParameter(
         'reasoningEffort',
@@ -207,7 +227,15 @@ export class ProDexChatModel implements INodeType {
       ) as ReasoningEffort;
       const personality = this.getNodeParameter('personality', itemIndex) as Personality;
       const sandbox = this.getNodeParameter('sandbox', itemIndex) as SandboxMode;
-      const systemPrompt = this.getNodeParameter('systemPrompt', itemIndex, '') as string;
+      const effectiveSandbox: SandboxMode = n8nManagement ? 'full_access' : sandbox;
+      const configuredSystemPrompt = this.getNodeParameter(
+        'systemPrompt',
+        itemIndex,
+        '',
+      ) as string;
+      const systemPrompt = [configuredSystemPrompt, n8nManagement?.prompt]
+        .filter(Boolean)
+        .join('\n\n');
       const skills = resolveSkillNames(this.getNodeParameter('skills', itemIndex, []) as string[]);
       const options = this.getNodeParameter('options', itemIndex, {}) as {
         timeoutSeconds?: number;
@@ -218,10 +246,12 @@ export class ProDexChatModel implements INodeType {
         codexHome,
         reasoningEffort,
         personality,
-        sandbox,
+        sandbox: effectiveSandbox,
         timeoutMs: (options.timeoutSeconds ?? 300) * 1000,
         systemPrompt,
         staticSkillNames: skills,
+        workingDirectory: n8nManagement?.workingDirectory,
+        environment: n8nManagement?.environment,
       });
 
       return supplyModel(this, chatModel);

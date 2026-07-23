@@ -18,6 +18,7 @@ describe('ProDexSetup node', () => {
     expect(values).toEqual([
       'installCodex',
       'runtimeStatus',
+      'testN8nConnection',
       'exportCredential',
       'startDeviceLogin',
       'waitForLogin',
@@ -25,5 +26,6 @@ describe('ProDexSetup node', () => {
     expect(
       node.description.properties?.find((property) => property.name === 'codexVersion')?.default,
     ).toBe('latest');
+    expect(node.description.credentials?.[0]?.name).toBe('prodexN8nApi');
   });
 });

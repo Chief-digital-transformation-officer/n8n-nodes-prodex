@@ -70,6 +70,7 @@ export interface RunCodexAgentParams {
   tokenBundle: CodexTokenBundle;
   codexHome: string;
   additionalDirectories?: string[];
+  environment?: Record<string, string>;
 }
 
 export interface AgentIdentityAuthRecord {

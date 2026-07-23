@@ -23,6 +23,10 @@ import {
   CodexRuntimeInstallError,
   SkillCliInstallError,
 } from '../../lib/errors';
+import {
+  prepareN8nManagement,
+  type N8nApiCredentialValues,
+} from '../../lib/n8n/management';
 import { buildAgentPrompt, resolveSkillNames } from '../../lib/skills/buildAgentPrompt';
 import { installSkillViaCli } from '../../lib/skills/installSkillCli';
 import { getInstalledSkillLoadOptions } from '../../lib/skills/skillLoadOptions';
@@ -77,6 +81,16 @@ export class ProDex implements INodeType {
           },
         },
       },
+      {
+        name: 'prodexN8nApi',
+        displayName: 'ProDex N8N API',
+        required: false,
+        displayOptions: {
+          show: {
+            operation: AGENT_OPERATIONS,
+          },
+        },
+      },
     ],
     properties: [
       {
@@ -93,7 +107,7 @@ export class ProDex implements INodeType {
       },
       {
         displayName:
-          'Known issues & watchouts\n\n• Requires self-hosted n8n. Codex CLI and n8nac are installed with this package.\n• ProDex Setup can install a different Codex CLI version in the persistent codexHome runtime.\n• The n8n-architect skill from n8n-as-code is preinstalled and selected by default.\n• Never set CODEX_ACCESS_TOKEN to a ChatGPT OAuth token.\n• Prefer Read Only sandbox on shared servers unless you trust full filesystem access.\n• Continue Previous Thread stores threadId in node static data between runs.\n• Codex uses your ChatGPT subscription, not pay-per-token API billing.',
+          'Known issues & watchouts\n\n• Requires self-hosted n8n. Codex CLI and n8nac are installed with this package.\n• Select an optional ProDex n8n API credential to auto-connect n8nac and Data Tables. This mode uses Full Access because the Codex Linux sandbox requires user namespaces and blocks local n8n networking in many containers.\n• ProDex Setup can install a different Codex CLI version in the persistent codexHome runtime.\n• The n8n-architect skill from n8n-as-code is preinstalled and selected by default.\n• Never set CODEX_ACCESS_TOKEN to a ChatGPT OAuth token.\n• Prefer Read Only sandbox on shared servers unless you trust full filesystem access.\n• Continue Previous Thread stores threadId in node static data between runs.\n• Codex uses your ChatGPT subscription, not pay-per-token API billing.',
         name: 'knownIssues',
         type: 'notice',
         default: '',
@@ -564,8 +578,17 @@ export class ProDex implements INodeType {
           const { activeBundle, codexHome } = await resolveRunnableAuth(fetch, credentials);
           ensurePreinstalledSkills(codexHome);
 
+          let n8nCredentials: N8nApiCredentialValues | null = null;
+          try {
+            n8nCredentials = (await this.getCredentials(
+              'prodexN8nApi',
+            )) as unknown as N8nApiCredentialValues;
+          } catch {
+            n8nCredentials = null;
+          }
+
           const prompt = this.getNodeParameter('prompt', itemIndex) as string;
-          const systemPrompt =
+          const configuredSystemPrompt =
             operation === 'runAgent'
               ? (this.getNodeParameter('systemPrompt', itemIndex, '') as string)
               : '';
@@ -587,6 +610,22 @@ export class ProDex implements INodeType {
             timeoutSeconds?: number;
           };
 
+          const requestedWorkingDirectory = this.getNodeParameter(
+            'workingDirectory',
+            itemIndex,
+            '',
+          ) as string;
+          const n8nManagement = n8nCredentials
+            ? prepareN8nManagement(
+                codexHome,
+                n8nCredentials,
+                requestedWorkingDirectory || undefined,
+              )
+            : null;
+          const systemPrompt = [configuredSystemPrompt, n8nManagement?.prompt]
+            .filter(Boolean)
+            .join('\n\n');
+
           const builtPrompt = buildAgentPrompt({
             userPrompt: prompt,
             systemPrompt,
@@ -603,11 +642,9 @@ export class ProDex implements INodeType {
           const personality = this.getNodeParameter('personality', itemIndex) as Personality;
           const threadMode = this.getNodeParameter('threadMode', itemIndex) as ThreadMode;
           const sandbox = this.getNodeParameter('sandbox', itemIndex) as SandboxMode;
-          const workingDirectory = this.getNodeParameter(
-            'workingDirectory',
-            itemIndex,
-            '',
-          ) as string;
+          const effectiveSandbox: SandboxMode = n8nManagement ? 'full_access' : sandbox;
+          const workingDirectory =
+            n8nManagement?.workingDirectory || requestedWorkingDirectory || undefined;
 
           let threadId = this.getNodeParameter('threadId', itemIndex, '') as string;
           const staticData = this.getWorkflowStaticData('node');
@@ -633,8 +670,8 @@ export class ProDex implements INodeType {
             personality,
             threadMode,
             threadId: threadId || undefined,
-            sandbox,
-            workingDirectory: workingDirectory || undefined,
+            sandbox: effectiveSandbox,
+            workingDirectory,
             outputSchema,
             timeoutMs: (options.timeoutSeconds ?? 300) * 1000,
             streamProgress: options.streamProgress ?? false,
@@ -644,6 +681,7 @@ export class ProDex implements INodeType {
             tokenBundle: activeBundle,
             codexHome,
             additionalDirectories: builtPrompt.additionalDirectories,
+            environment: n8nManagement?.environment,
           });
 
           if (threadMode === 'continue' && result.threadId) {
@@ -660,6 +698,16 @@ export class ProDex implements INodeType {
               model: result.model,
               finishReason: result.finishReason,
               appliedSkills: builtPrompt.appliedSkills,
+              n8nManagement: n8nManagement
+                ? {
+                    connected: true,
+                    baseUrl: n8nManagement.baseUrl,
+                    workspace: n8nManagement.workingDirectory,
+                    sandbox: effectiveSandbox,
+                    workflowCli: 'n8nac',
+                    dataTablesCli: 'n8n-data-tables',
+                  }
+                : { connected: false },
             },
             pairedItem: { item: itemIndex },
           });
