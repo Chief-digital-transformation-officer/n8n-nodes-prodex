@@ -30,7 +30,7 @@ try {
   const runAgent = require(join(root, 'dist/lib/codex/runAgent.js'));
   log('attempting runtime codex-sdk load via loadCodexSdk path', {}, 'C');
   await runAgent.runCodexAgent({
-    model: 'gpt-5.4-mini',
+    model: 'gpt-5.6-luna',
     prompt: 'noop',
     threadMode: 'new',
     sandbox: 'readOnly',

@@ -1,9 +1,25 @@
-import type { IExecuteFunctions, INodeExecutionData, INodeType, INodeTypeDescription } from 'n8n-workflow';
+import type {
+  IExecuteFunctions,
+  INodeExecutionData,
+  INodeType,
+  INodeTypeDescription,
+} from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
-import { exportCredentialValuesWithWait, startDeviceLogin, waitForAgentIdentity } from '../../lib/auth/codexLogin';
-import { hasAgentIdentity, hasCompleteCodexAuth, readAuthJson, resolveCodexHome } from '../../lib/auth/codexEnv';
-import { CodexAuthSetupError } from '../../lib/errors';
+import {
+  exportCredentialValuesWithWait,
+  startDeviceLogin,
+  waitForAgentIdentity,
+} from '../../lib/auth/codexLogin';
+import {
+  hasAgentIdentity,
+  hasCompleteCodexAuth,
+  readAuthJson,
+  resolveCodexHome,
+} from '../../lib/auth/codexEnv';
+import { getCodexRuntimeStatus, installCodexCli } from '../../lib/codex/manageCodexCli';
+import { CodexAuthSetupError, CodexRuntimeInstallError } from '../../lib/errors';
+import { ensurePreinstalledSkills, resolveSkillsHome } from '../../lib/skills/skillStore';
 
 export class ProDexSetup implements INodeType {
   description: INodeTypeDescription = {
@@ -11,10 +27,10 @@ export class ProDexSetup implements INodeType {
     name: 'prodexSetup',
     icon: { light: 'file:../ProDex/prodex.svg', dark: 'file:../ProDex/prodex.dark.svg' },
     group: ['transform'],
-    version: 1,
+    version: 2,
     subtitle: '={{$parameter["operation"]}}',
     description:
-      'One-time ChatGPT subscription login for ProDex. Run Start Device Login, complete browser auth, then Wait for Login Complete before using the ProDex node.',
+      'Set up ChatGPT login, inspect the preinstalled n8n-as-code tooling, and install or update the Codex CLI version used by ProDex.',
     defaults: {
       name: 'ProDex Setup',
     },
@@ -30,14 +46,14 @@ export class ProDexSetup implements INodeType {
     properties: [
       {
         displayName:
-          'Setup guide (first time)\n\n1. Create a workflow with Manual Trigger → ProDex Setup.\n2. Operation: Start Device Login → Execute.\n3. Open verificationUrl in your browser and enter userCode. Sign in with ChatGPT.\n4. Change operation to Wait for Login Complete → Execute again.\n5. Confirm the output shows hasCompleteAuth: true.\n6. Add the ProDex node — leave Use n8n Credentials off. No credential picker needed.\n\nSkills: use ProDex → Install Skill, then List Installed Skills or Invoke Skill.\n\nOptional: Export Credential Values only if you want tokens in n8n Credentials and enable Use n8n Credentials on ProDex.',
+          'Setup guide (first time)\n\n1. Run Runtime Status to verify Codex, n8nac, and the n8n-architect skill.\n2. Optional: use Install / Update Codex to select latest or an exact CLI version.\n3. Run Start Device Login and complete browser auth.\n4. Run Wait for Login Complete and confirm hasCompleteAuth: true.\n5. Add ProDex — n8n-architect is preselected and n8nac is available to Codex on PATH.\n\nExport Credential Values is only needed when you explicitly use n8n Credentials.',
         name: 'setupGuide',
         type: 'notice',
         default: '',
       },
       {
         displayName:
-          'Known issues & watchouts\n\n• Self-hosted n8n only — not supported on n8n Cloud.\n• Use package version 0.1.12 or newer.\n• hasAgentIdentity: false is normal for ChatGPT device login. Ignore it.\n• hasCompleteAuth: true is what matters (valid OAuth tokens in auth.json).\n• Do not set CODEX_ACCESS_TOKEN to your OAuth access token. That env var is for enterprise Codex access tokens only and will break exec with "agent identity JWT payload is not valid JSON".\n• After browser login, run Wait for Login Complete — do not skip straight to ProDex on first setup.\n• Auth is stored on disk at codexHome (often /home/node/.n8n/codex or /home/node/.n8n-codex in Docker). Check login.log there if login fails.\n• If tokens expire later, repeat Start Device Login → Wait for Login Complete.\n• Pin this package version in production; Codex endpoints can change.',
+          'Known issues & watchouts\n\n• Self-hosted n8n only — not supported on n8n Cloud.\n• The n8n process needs network access and write access to codexHome/runtime to install or update Codex.\n• hasAgentIdentity: false is normal for ChatGPT device login; hasCompleteAuth: true is what matters.\n• Do not set CODEX_ACCESS_TOKEN to a ChatGPT OAuth token.\n• Auth, the managed Codex runtime, and skills are stored under codexHome.\n• Exact Codex versions are recommended for reproducible production deployments.',
         name: 'knownIssues',
         type: 'notice',
         default: '',
@@ -49,25 +65,68 @@ export class ProDexSetup implements INodeType {
         noDataExpression: true,
         options: [
           {
+            name: 'Install / Update Codex',
+            value: 'installCodex',
+            description:
+              'Install latest or an exact Codex CLI version in the persistent ProDex runtime',
+            action: 'Install or update Codex',
+          },
+          {
+            name: 'Runtime Status',
+            value: 'runtimeStatus',
+            description: 'Show active Codex, bundled Codex, n8nac, and preinstalled skill status',
+            action: 'Get runtime status',
+          },
+          {
             name: 'Export Credential Values',
             value: 'exportCredential',
-            description: 'Optional backup — read tokens from auth.json after login (credentials not required to run ProDex)',
+            description:
+              'Optional backup — read tokens from auth.json after login (credentials not required to run ProDex)',
             action: 'Export credential values',
           },
           {
             name: 'Start Device Login',
             value: 'startDeviceLogin',
-            description: 'Step 1 — start ChatGPT device login and return the verification URL and code',
+            description:
+              'Step 1 — start ChatGPT device login and return the verification URL and code',
             action: 'Start device login',
           },
           {
             name: 'Wait for Login Complete',
             value: 'waitForLogin',
-            description: 'Step 2 — wait until OAuth tokens are saved and login process exits successfully',
+            description:
+              'Step 2 — wait until OAuth tokens are saved and login process exits successfully',
             action: 'Wait for login complete',
           },
         ],
-        default: 'startDeviceLogin',
+        default: 'runtimeStatus',
+      },
+      {
+        displayName: 'Codex Version',
+        name: 'codexVersion',
+        type: 'string',
+        default: 'latest',
+        placeholder: '0.145.0',
+        required: true,
+        description:
+          'Use latest or an exact published semver. The version is installed under codexHome/runtime and becomes active immediately for new runs.',
+        displayOptions: {
+          show: {
+            operation: ['installCodex'],
+          },
+        },
+      },
+      {
+        displayName:
+          'The managed runtime overrides the Codex CLI bundled with this community package. It does not modify the package installation and can persist on a mounted n8n user folder.',
+        name: 'codexVersionNotice',
+        type: 'notice',
+        default: '',
+        displayOptions: {
+          show: {
+            operation: ['installCodex'],
+          },
+        },
       },
       {
         displayName: 'Wait Time (Seconds)',
@@ -101,6 +160,60 @@ export class ProDexSetup implements INodeType {
     const operation = this.getNodeParameter('operation', 0) as string;
 
     try {
+      const codexHome = resolveCodexHome();
+      const preinstalledSkills = ensurePreinstalledSkills(codexHome);
+
+      if (operation === 'runtimeStatus') {
+        const runtime = getCodexRuntimeStatus(codexHome);
+        return [
+          [
+            {
+              json: {
+                operation,
+                codexHome,
+                activeCodexVersion: runtime.active.version,
+                activeCodexSource: runtime.active.source,
+                bundledCodexVersion: runtime.bundledVersion,
+                managedCodexVersion: runtime.managedVersion ?? null,
+                managedRuntimeHome: runtime.managedRuntimeHome,
+                n8nacVersion: runtime.n8nacVersion,
+                n8nacBinDirectory: runtime.n8nacBinDirectory,
+                skillsHome: resolveSkillsHome(codexHome),
+                preinstalledSkills,
+              },
+            },
+          ],
+        ];
+      }
+
+      if (operation === 'installCodex') {
+        const version = this.getNodeParameter('codexVersion', 0, 'latest') as string;
+        const result = await installCodexCli(codexHome, version);
+        return [
+          [
+            {
+              json: {
+                operation,
+                codexHome,
+                requestedVersion: result.requestedVersion,
+                previousActiveVersion: result.previousActiveVersion,
+                activeCodexVersion: result.active.version,
+                activeCodexSource: result.active.source,
+                bundledCodexVersion: result.bundledVersion,
+                managedRuntimeHome: result.managedRuntimeHome,
+                n8nacVersion: result.n8nacVersion,
+                preinstalledSkills,
+                command: result.command,
+                stdout: result.stdout,
+                stderr: result.stderr,
+                instructions:
+                  'Codex is ready. New ProDex runs use this managed CLI version immediately.',
+              },
+            },
+          ],
+        ];
+      }
+
       if (operation === 'startDeviceLogin') {
         const login = await startDeviceLogin();
         return [
@@ -124,7 +237,7 @@ export class ProDexSetup implements INodeType {
           [
             {
               json: {
-                codexHome: resolveCodexHome(),
+                codexHome,
                 hasAgentIdentity: hasAgentIdentity(authJson),
                 hasCompleteAuth: hasCompleteCodexAuth(authJson),
                 accountId: authJson.tokens.account_id,
@@ -139,14 +252,14 @@ export class ProDexSetup implements INodeType {
       if (operation === 'exportCredential') {
         const waitSeconds = this.getNodeParameter('waitSeconds', 0, 180) as number;
         const credential = await exportCredentialValuesWithWait(waitSeconds * 1000);
-        const authJson = readAuthJson(resolveCodexHome());
+        const authJson = readAuthJson(codexHome);
         const complete = hasCompleteCodexAuth(authJson);
         return [
           [
             {
               json: {
                 ...credential,
-                codexHome: resolveCodexHome(),
+                codexHome,
                 hasAgentIdentity: hasAgentIdentity(authJson),
                 hasCompleteAuth: complete,
                 instructions: complete
@@ -160,7 +273,7 @@ export class ProDexSetup implements INodeType {
 
       throw new NodeOperationError(this.getNode(), `Unsupported operation: ${operation}`);
     } catch (error) {
-      if (error instanceof CodexAuthSetupError) {
+      if (error instanceof CodexAuthSetupError || error instanceof CodexRuntimeInstallError) {
         throw new NodeOperationError(this.getNode(), error.message);
       }
       throw error;

@@ -1,19 +1,33 @@
-import type { ILoadOptionsFunctions, INodeType, INodeTypeDescription, ISupplyDataFunctions } from 'n8n-workflow';
+import type {
+  ILoadOptionsFunctions,
+  INodeType,
+  INodeTypeDescription,
+  ISupplyDataFunctions,
+} from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import { supplyModel } from '@n8n/ai-node-sdk';
 
 import { resolveRunnableAuth } from '../../lib/auth/resolveAuth';
 import { CodexChatModel } from '../../lib/codex/CodexChatModel';
-import { CodexAuthRefreshError, CodexAuthSetupError } from '../../lib/errors';
+import {
+  CODEX_MODEL_OPTIONS,
+  CODEX_REASONING_EFFORT_OPTIONS,
+  DEFAULT_CODEX_MODEL,
+} from '../../lib/codex/options';
+import {
+  CodexAuthRefreshError,
+  CodexAuthSetupError,
+  CodexRuntimeInstallError,
+} from '../../lib/errors';
 import { resolveSkillNames } from '../../lib/skills/buildAgentPrompt';
 import { getInstalledSkillLoadOptions } from '../../lib/skills/skillLoadOptions';
-import type { CodexCredentialValues, Personality, ReasoningEffort, SandboxMode } from '../../lib/types/codex';
-
-const DEFAULT_MODELS = [
-  { name: 'GPT-5.5', value: 'gpt-5.5' },
-  { name: 'GPT-5.4', value: 'gpt-5.4' },
-  { name: 'GPT-5.4 Mini', value: 'gpt-5.4-mini' },
-];
+import { ensurePreinstalledSkills } from '../../lib/skills/skillStore';
+import type {
+  CodexCredentialValues,
+  Personality,
+  ReasoningEffort,
+  SandboxMode,
+} from '../../lib/types/codex';
 
 export class ProDexChatModel implements INodeType {
   description: INodeTypeDescription = {
@@ -95,27 +109,22 @@ export class ProDexChatModel implements INodeType {
         typeOptions: {
           loadOptionsMethod: 'getInstalledSkills',
         },
-        default: [],
+        default: ['n8n-architect'],
         description: 'Installed skills to apply when AI Agent invokes this model',
       },
       {
         displayName: 'Model',
         name: 'model',
         type: 'options',
-        options: DEFAULT_MODELS,
-        default: 'gpt-5.4',
+        options: CODEX_MODEL_OPTIONS,
+        default: DEFAULT_CODEX_MODEL,
         description: 'Codex model used when AI Agent invokes the chat model',
       },
       {
         displayName: 'Reasoning Effort',
         name: 'reasoningEffort',
         type: 'options',
-        options: [
-          { name: 'Extra High', value: 'xhigh' },
-          { name: 'High', value: 'high' },
-          { name: 'Low', value: 'low' },
-          { name: 'Medium', value: 'medium' },
-        ],
+        options: CODEX_REASONING_EFFORT_OPTIONS,
         default: 'medium',
       },
       {
@@ -172,7 +181,11 @@ export class ProDexChatModel implements INodeType {
 
   async supplyData(this: ISupplyDataFunctions, itemIndex: number) {
     try {
-      const useN8nCredentials = this.getNodeParameter('useN8nCredentials', itemIndex, false) as boolean;
+      const useN8nCredentials = this.getNodeParameter(
+        'useN8nCredentials',
+        itemIndex,
+        false,
+      ) as boolean;
       let credentials: CodexCredentialValues | null = null;
       if (useN8nCredentials) {
         try {
@@ -186,13 +199,19 @@ export class ProDexChatModel implements INodeType {
       }
 
       const { activeBundle, codexHome } = await resolveRunnableAuth(fetch, credentials);
+      ensurePreinstalledSkills(codexHome);
       const model = this.getNodeParameter('model', itemIndex) as string;
-      const reasoningEffort = this.getNodeParameter('reasoningEffort', itemIndex) as ReasoningEffort;
+      const reasoningEffort = this.getNodeParameter(
+        'reasoningEffort',
+        itemIndex,
+      ) as ReasoningEffort;
       const personality = this.getNodeParameter('personality', itemIndex) as Personality;
       const sandbox = this.getNodeParameter('sandbox', itemIndex) as SandboxMode;
       const systemPrompt = this.getNodeParameter('systemPrompt', itemIndex, '') as string;
       const skills = resolveSkillNames(this.getNodeParameter('skills', itemIndex, []) as string[]);
-      const options = this.getNodeParameter('options', itemIndex, {}) as { timeoutSeconds?: number };
+      const options = this.getNodeParameter('options', itemIndex, {}) as {
+        timeoutSeconds?: number;
+      };
 
       const chatModel = new CodexChatModel(model, {
         tokenBundle: activeBundle,
@@ -211,6 +230,13 @@ export class ProDexChatModel implements INodeType {
         throw new NodeOperationError(
           this.getNode(),
           `${error.message} Re-run ProDex Setup: Start Device Login → Wait for Login Complete.`,
+        );
+      }
+
+      if (error instanceof CodexRuntimeInstallError) {
+        throw new NodeOperationError(
+          this.getNode(),
+          `${error.message} Run ProDex Setup → Runtime Status or Install / Update Codex.`,
         );
       }
 

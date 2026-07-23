@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'path';
 
 import { CodexAuthSetupError } from '../errors';
 
@@ -18,6 +19,13 @@ export interface ParsedSkillMarkdown {
 
 const SKILL_FILE = 'SKILL.md';
 const SKILL_NAME_PATTERN = /^[a-z0-9][a-z0-9-_]{0,63}$/i;
+const PREINSTALLED_N8N_SKILL = 'n8n-architect';
+const nodeRequire = createRequire(__filename);
+
+export interface PreinstalledSkillResult extends InstalledSkill {
+  changed: boolean;
+  source: string;
+}
 
 export function resolveSkillsHome(codexHome: string): string {
   return join(codexHome, 'skills');
@@ -64,11 +72,17 @@ export function parseSkillMarkdown(content: string): ParsedSkillMarkdown {
   };
 }
 
-export function installSkill(codexHome: string, skillName: string, skillMarkdown: string): InstalledSkill {
+export function installSkill(
+  codexHome: string,
+  skillName: string,
+  skillMarkdown: string,
+): InstalledSkill {
   const name = sanitizeSkillName(skillName);
   const parsed = parseSkillMarkdown(skillMarkdown);
   if (!parsed.body.trim()) {
-    throw new CodexAuthSetupError('Skill content is empty. Provide a SKILL.md body with instructions.');
+    throw new CodexAuthSetupError(
+      'Skill content is empty. Provide a SKILL.md body with instructions.',
+    );
   }
 
   const skillsHome = resolveSkillsHome(codexHome);
@@ -90,6 +104,55 @@ export function installSkill(codexHome: string, skillName: string, skillMarkdown
     path: skillPath,
     updatedAt: new Date(statSync(skillPath).mtimeMs).toISOString(),
   };
+}
+
+function loadBundledN8nArchitectSkill(): { content: string; source: string } {
+  try {
+    const n8nacPackageJson = nodeRequire.resolve('n8nac/package.json');
+    const n8nacRequire = createRequire(n8nacPackageJson);
+    const skillsPackageJson = n8nacRequire.resolve('@n8n-as-code/skills/package.json');
+    const source = join(
+      dirname(skillsPackageJson),
+      'dist',
+      'agent-skills',
+      PREINSTALLED_N8N_SKILL,
+      SKILL_FILE,
+    );
+    const content = readFileSync(source, 'utf8')
+      .replaceAll('{{N8NAC_CMD}}', 'n8nac')
+      .replaceAll('{{N8NAC_SKILLS_CMD}}', 'n8nac skills')
+      .replaceAll('{{N8N_MANAGER_CMD}}', 'npx --yes @n8n-as-code/n8n-manager')
+      .replaceAll(
+        '{{N8NAC_CONTEXT_ROOT_HINT}}',
+        'Generated context root hint: not embedded. Use the working directory configured in the ProDex node.',
+      );
+    return { content, source };
+  } catch (error) {
+    throw new CodexAuthSetupError(
+      `The preinstalled n8n-as-code skill could not be loaded. Reinstall n8n-nodes-prodex. ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+export function ensurePreinstalledSkills(codexHome: string): PreinstalledSkillResult[] {
+  const bundled = loadBundledN8nArchitectSkill();
+  const skillPath = join(resolveSkillsHome(codexHome), PREINSTALLED_N8N_SKILL, SKILL_FILE);
+  if (existsSync(skillPath) && readFileSync(skillPath, 'utf8') === bundled.content) {
+    const parsed = parseSkillMarkdown(bundled.content);
+    return [
+      {
+        name: PREINSTALLED_N8N_SKILL,
+        description: parsed.description,
+        path: skillPath,
+        updatedAt: new Date(statSync(skillPath).mtimeMs).toISOString(),
+        changed: false,
+        source: bundled.source,
+      },
+    ];
+  }
+
+  const installed = installSkill(codexHome, PREINSTALLED_N8N_SKILL, bundled.content);
+  return [{ ...installed, changed: true, source: bundled.source }];
 }
 
 export function listInstalledSkills(codexHome: string): InstalledSkill[] {
@@ -122,7 +185,10 @@ export function listInstalledSkills(codexHome: string): InstalledSkill[] {
   return skills.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function loadInstalledSkill(codexHome: string, skillName: string): ParsedSkillMarkdown & { name: string } {
+export function loadInstalledSkill(
+  codexHome: string,
+  skillName: string,
+): ParsedSkillMarkdown & { name: string } {
   const name = sanitizeSkillName(skillName);
   const skillPath = join(resolveSkillsHome(codexHome), name, SKILL_FILE);
   if (!existsSync(skillPath)) {

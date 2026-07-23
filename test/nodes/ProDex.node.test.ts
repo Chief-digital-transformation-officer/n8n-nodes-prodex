@@ -15,7 +15,9 @@ describe('ProDex node', () => {
 
   it('exposes simplified operation dropdown', () => {
     const node = new ProDex();
-    const operation = node.description.properties?.find((property) => property.name === 'operation');
+    const operation = node.description.properties?.find(
+      (property) => property.name === 'operation',
+    );
     const values = (operation?.options ?? []).map((option) =>
       typeof option === 'string' ? option : option.value,
     );
@@ -29,7 +31,38 @@ describe('ProDex node', () => {
       'plugins',
     ]);
     expect(node.methods?.loadOptions?.getInstalledSkills).toBeTypeOf('function');
-    expect(node.description.properties?.some((property) => property.name === 'useN8nCredentials')).toBe(true);
-    expect(node.description.credentials?.[0]?.displayOptions?.show?.useN8nCredentials).toEqual([true]);
+    expect(
+      node.description.properties?.some((property) => property.name === 'useN8nCredentials'),
+    ).toBe(true);
+    expect(node.description.credentials?.[0]?.displayOptions?.show?.useN8nCredentials).toEqual([
+      true,
+    ]);
+  });
+
+  it('uses current Codex models, reasoning enum, and preinstalled n8n skill', () => {
+    const node = new ProDex();
+    const model = node.description.properties?.find((property) => property.name === 'model');
+    const reasoning = node.description.properties?.find(
+      (property) => property.name === 'reasoningEffort',
+    );
+    const skills = node.description.properties?.find((property) => property.name === 'skills');
+
+    expect(model?.default).toBe('gpt-5.6-sol');
+    expect(
+      (model?.options ?? []).map((option) => (typeof option === 'string' ? option : option.value)),
+    ).toEqual([
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+      'gpt-5.6-luna',
+      'gpt-5.5',
+      'gpt-5.4',
+      'gpt-5.4-mini',
+    ]);
+    expect(
+      (reasoning?.options ?? []).map((option) =>
+        typeof option === 'string' ? option : option.value,
+      ),
+    ).toEqual(['minimal', 'low', 'medium', 'high', 'xhigh']);
+    expect(skills?.default).toEqual(['n8n-architect']);
   });
 });

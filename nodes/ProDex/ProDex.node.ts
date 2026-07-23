@@ -11,19 +11,33 @@ import { NodeConnectionTypes, NodeApiError, NodeOperationError } from 'n8n-workf
 
 import { resolveCodexHome } from '../../lib/auth/codexEnv';
 import { resolveRunnableAuth } from '../../lib/auth/resolveAuth';
+import {
+  CODEX_MODEL_OPTIONS,
+  CODEX_REASONING_EFFORT_OPTIONS,
+  DEFAULT_CODEX_MODEL,
+} from '../../lib/codex/options';
 import { runCodexAgent } from '../../lib/codex/runAgent';
-import { CodexAuthRefreshError, CodexAuthSetupError, SkillCliInstallError } from '../../lib/errors';
+import {
+  CodexAuthRefreshError,
+  CodexAuthSetupError,
+  CodexRuntimeInstallError,
+  SkillCliInstallError,
+} from '../../lib/errors';
 import { buildAgentPrompt, resolveSkillNames } from '../../lib/skills/buildAgentPrompt';
 import { installSkillViaCli } from '../../lib/skills/installSkillCli';
 import { getInstalledSkillLoadOptions } from '../../lib/skills/skillLoadOptions';
-import { listInstalledSkills, resolveSkillsHome } from '../../lib/skills/skillStore';
-import type { CodexCredentialValues, Personality, ReasoningEffort, SandboxMode, ThreadMode } from '../../lib/types/codex';
-
-const DEFAULT_MODELS = [
-  { name: 'GPT-5.5', value: 'gpt-5.5' },
-  { name: 'GPT-5.4', value: 'gpt-5.4' },
-  { name: 'GPT-5.4 Mini', value: 'gpt-5.4-mini' },
-];
+import {
+  ensurePreinstalledSkills,
+  listInstalledSkills,
+  resolveSkillsHome,
+} from '../../lib/skills/skillStore';
+import type {
+  CodexCredentialValues,
+  Personality,
+  ReasoningEffort,
+  SandboxMode,
+  ThreadMode,
+} from '../../lib/types/codex';
 
 const AGENT_OPERATIONS = ['runAgent', 'invokeSkill'];
 
@@ -35,7 +49,8 @@ export class ProDex implements INodeType {
     group: ['transform'],
     version: 2,
     usableAsTool: true,
-    subtitle: '={{$parameter["operation"] === "runAgent" || $parameter["operation"] === "invokeSkill" ? $parameter["model"] : $parameter["operation"]}}',
+    subtitle:
+      '={{$parameter["operation"] === "runAgent" || $parameter["operation"] === "invokeSkill" ? $parameter["model"] : $parameter["operation"]}}',
     description:
       'Run OpenAI Codex, install skills, and manage your ProDex workspace. Complete ProDex Setup once before agent runs.',
     defaults: {
@@ -78,7 +93,7 @@ export class ProDex implements INodeType {
       },
       {
         displayName:
-          'Known issues & watchouts\n\n• Requires self-hosted n8n and @openai/codex CLI binaries (installed with this package).\n• Use package version 0.1.12 or newer.\n• Never set CODEX_ACCESS_TOKEN to an OAuth access token — it breaks Codex exec.\n• Prefer Read Only sandbox on shared servers unless you trust full filesystem access.\n• Continue Previous Thread stores threadId in node static data between runs.\n• If auth errors appear, re-run ProDex Setup (Start Device Login → Wait for Login Complete).\n• Codex uses your ChatGPT subscription, not pay-per-token API billing.',
+          'Known issues & watchouts\n\n• Requires self-hosted n8n. Codex CLI and n8nac are installed with this package.\n• ProDex Setup can install a different Codex CLI version in the persistent codexHome runtime.\n• The n8n-architect skill from n8n-as-code is preinstalled and selected by default.\n• Never set CODEX_ACCESS_TOKEN to a ChatGPT OAuth token.\n• Prefer Read Only sandbox on shared servers unless you trust full filesystem access.\n• Continue Previous Thread stores threadId in node static data between runs.\n• Codex uses your ChatGPT subscription, not pay-per-token API billing.',
         name: 'knownIssues',
         type: 'notice',
         default: '',
@@ -89,7 +104,8 @@ export class ProDex implements INodeType {
         },
       },
       {
-        displayName: 'Developer contact: collegeitpro@gmail.com — questions, bugs, and feature requests welcome.',
+        displayName:
+          'Developer contact: collegeitpro@gmail.com — questions, bugs, and feature requests welcome.',
         name: 'developerContact',
         type: 'notice',
         default: '',
@@ -154,7 +170,7 @@ export class ProDex implements INodeType {
       },
       {
         displayName:
-          'Installs a skill into codexHome/skills using the skills CLI.\n\nExample:\nnpx skills add https://github.com/anthropics/skills --skill docx -a codex -g -y',
+          'Installs a skill into codexHome/skills using the skills CLI. n8n-architect from n8n-as-code is already installed.\n\nExample:\nnpx skills add https://github.com/anthropics/skills --skill docx -a codex -g -y',
         name: 'installSkillNotice',
         type: 'notice',
         default: '',
@@ -184,8 +200,8 @@ export class ProDex implements INodeType {
         displayName: 'Repository URL',
         name: 'repoUrl',
         type: 'string',
-        default: 'https://github.com/anthropics/skills',
-        placeholder: 'https://github.com/anthropics/skills',
+        default: 'https://github.com/EtienneLescot/n8n-as-code',
+        placeholder: 'https://github.com/EtienneLescot/n8n-as-code',
         required: true,
         description: 'GitHub repository that contains SKILL.md files',
         displayOptions: {
@@ -198,8 +214,8 @@ export class ProDex implements INodeType {
         displayName: 'Skill Name',
         name: 'installSkillName',
         type: 'string',
-        default: '',
-        placeholder: 'docx',
+        default: 'n8n-architect',
+        placeholder: 'n8n-architect',
         required: true,
         description: 'Skill folder name passed to --skill',
         displayOptions: {
@@ -254,7 +270,7 @@ export class ProDex implements INodeType {
         typeOptions: {
           loadOptionsMethod: 'getInstalledSkills',
         },
-        default: [],
+        default: ['n8n-architect'],
         description: 'Optional installed skills to apply for this run',
         displayOptions: {
           show: {
@@ -298,8 +314,8 @@ export class ProDex implements INodeType {
         displayName: 'Model',
         name: 'model',
         type: 'options',
-        options: DEFAULT_MODELS,
-        default: 'gpt-5.4',
+        options: CODEX_MODEL_OPTIONS,
+        default: DEFAULT_CODEX_MODEL,
         displayOptions: {
           show: {
             operation: AGENT_OPERATIONS,
@@ -310,12 +326,7 @@ export class ProDex implements INodeType {
         displayName: 'Reasoning Effort',
         name: 'reasoningEffort',
         type: 'options',
-        options: [
-          { name: 'Extra High', value: 'xhigh' },
-          { name: 'High', value: 'high' },
-          { name: 'Low', value: 'low' },
-          { name: 'Medium', value: 'medium' },
-        ],
+        options: CODEX_REASONING_EFFORT_OPTIONS,
         default: 'medium',
         displayOptions: {
           show: {
@@ -462,6 +473,7 @@ export class ProDex implements INodeType {
     for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
       try {
         const operation = this.getNodeParameter('operation', itemIndex, 'runAgent') as string;
+        ensurePreinstalledSkills(resolveCodexHome());
 
         if (operation === 'listSkills') {
           const codexHome = resolveCodexHome();
@@ -481,7 +493,9 @@ export class ProDex implements INodeType {
 
         if (operation === 'installSkill') {
           const codexHome = resolveCodexHome();
-          const packageManager = this.getNodeParameter('packageManager', itemIndex, 'npx') as 'npx' | 'pnpm';
+          const packageManager = this.getNodeParameter('packageManager', itemIndex, 'npx') as
+            | 'npx'
+            | 'pnpm';
           const repoUrl = this.getNodeParameter('repoUrl', itemIndex) as string;
           const skillName = this.getNodeParameter('installSkillName', itemIndex) as string;
 
@@ -529,7 +543,11 @@ export class ProDex implements INodeType {
         }
 
         if (operation === 'runAgent' || operation === 'invokeSkill') {
-          const useN8nCredentials = this.getNodeParameter('useN8nCredentials', itemIndex, false) as boolean;
+          const useN8nCredentials = this.getNodeParameter(
+            'useN8nCredentials',
+            itemIndex,
+            false,
+          ) as boolean;
           let credentials: CodexCredentialValues | null = null;
           if (useN8nCredentials) {
             try {
@@ -544,17 +562,22 @@ export class ProDex implements INodeType {
           }
 
           const { activeBundle, codexHome } = await resolveRunnableAuth(fetch, credentials);
+          ensurePreinstalledSkills(codexHome);
 
           const prompt = this.getNodeParameter('prompt', itemIndex) as string;
           const systemPrompt =
-            operation === 'runAgent' ? (this.getNodeParameter('systemPrompt', itemIndex, '') as string) : '';
+            operation === 'runAgent'
+              ? (this.getNodeParameter('systemPrompt', itemIndex, '') as string)
+              : '';
           const selectedSkills =
             operation === 'invokeSkill'
               ? (this.getNodeParameter('invokeSkills', itemIndex, []) as string[])
               : (this.getNodeParameter('skills', itemIndex, []) as string[]);
 
           if (operation === 'invokeSkill' && selectedSkills.length === 0) {
-            throw new NodeOperationError(this.getNode(), 'Select at least one skill to invoke.', { itemIndex });
+            throw new NodeOperationError(this.getNode(), 'Select at least one skill to invoke.', {
+              itemIndex,
+            });
           }
 
           const options = this.getNodeParameter('options', itemIndex, {}) as {
@@ -573,15 +596,26 @@ export class ProDex implements INodeType {
           });
 
           const model = this.getNodeParameter('model', itemIndex) as string;
-          const reasoningEffort = this.getNodeParameter('reasoningEffort', itemIndex) as ReasoningEffort;
+          const reasoningEffort = this.getNodeParameter(
+            'reasoningEffort',
+            itemIndex,
+          ) as ReasoningEffort;
           const personality = this.getNodeParameter('personality', itemIndex) as Personality;
           const threadMode = this.getNodeParameter('threadMode', itemIndex) as ThreadMode;
           const sandbox = this.getNodeParameter('sandbox', itemIndex) as SandboxMode;
-          const workingDirectory = this.getNodeParameter('workingDirectory', itemIndex, '') as string;
+          const workingDirectory = this.getNodeParameter(
+            'workingDirectory',
+            itemIndex,
+            '',
+          ) as string;
 
           let threadId = this.getNodeParameter('threadId', itemIndex, '') as string;
           const staticData = this.getWorkflowStaticData('node');
-          if (threadMode === 'continue' && staticData.threadId && typeof staticData.threadId === 'string') {
+          if (
+            threadMode === 'continue' &&
+            staticData.threadId &&
+            typeof staticData.threadId === 'string'
+          ) {
             threadId = staticData.threadId;
           }
 
@@ -632,7 +666,9 @@ export class ProDex implements INodeType {
           continue;
         }
 
-        throw new NodeOperationError(this.getNode(), `Unsupported operation: ${operation}`, { itemIndex });
+        throw new NodeOperationError(this.getNode(), `Unsupported operation: ${operation}`, {
+          itemIndex,
+        });
       } catch (error) {
         if (this.continueOnFail()) {
           returnData.push({
@@ -657,6 +693,13 @@ export class ProDex implements INodeType {
             `${error.message} Re-run ProDex Setup: Start Device Login → complete browser auth → Wait for Login Complete.`,
             { itemIndex },
           );
+        }
+
+        if (error instanceof CodexRuntimeInstallError) {
+          throw new NodeOperationError(this.getNode(), error.message, {
+            itemIndex,
+            description: error.stderr || error.stdout || error.command,
+          });
         }
 
         if (error instanceof Error && /Codex CLI binaries/i.test(error.message)) {

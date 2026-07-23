@@ -11,7 +11,28 @@ describe('ProDexChatModel node', () => {
     expect(node.description.outputs).toEqual(['ai_languageModel']);
     expect(node.supplyData).toBeTypeOf('function');
     expect(node.methods?.loadOptions?.getInstalledSkills).toBeTypeOf('function');
-    expect(node.description.properties?.some((property) => property.name === 'useN8nCredentials')).toBe(true);
-    expect(node.description.credentials?.[0]?.displayOptions?.show?.useN8nCredentials).toEqual([true]);
+    expect(
+      node.description.properties?.some((property) => property.name === 'useN8nCredentials'),
+    ).toBe(true);
+    expect(node.description.credentials?.[0]?.displayOptions?.show?.useN8nCredentials).toEqual([
+      true,
+    ]);
+  });
+
+  it('shares the current Codex reasoning enum and n8n skill default', () => {
+    const node = new ProDexChatModel();
+    const reasoning = node.description.properties?.find(
+      (property) => property.name === 'reasoningEffort',
+    );
+    const skills = node.description.properties?.find((property) => property.name === 'skills');
+    const model = node.description.properties?.find((property) => property.name === 'model');
+
+    expect(
+      (reasoning?.options ?? []).map((option) =>
+        typeof option === 'string' ? option : option.value,
+      ),
+    ).toEqual(['minimal', 'low', 'medium', 'high', 'xhigh']);
+    expect(skills?.default).toEqual(['n8n-architect']);
+    expect(model?.default).toBe('gpt-5.6-sol');
   });
 });

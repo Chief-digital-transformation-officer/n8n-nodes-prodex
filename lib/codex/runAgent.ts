@@ -1,5 +1,11 @@
 import type { CodexAgentResult, RunCodexAgentParams } from '../types/codex';
-import { buildCodexEnv, createCodexHome, mapPersonalityConfig, mapSandboxMode } from '../auth/codexEnv';
+import {
+  buildCodexEnv,
+  createCodexHome,
+  mapPersonalityConfig,
+  mapSandboxMode,
+} from '../auth/codexEnv';
+import { prependRuntimePath, resolveActiveCodexRuntime } from './manageCodexCli';
 
 type CodexSdkModule = typeof import('@openai/codex-sdk');
 
@@ -46,10 +52,12 @@ export function parseAgentResult(
 export async function runCodexAgent(params: RunCodexAgentParams): Promise<CodexAgentResult> {
   const { Codex } = await loadCodexSdk();
   const codexHome = params.codexHome || createCodexHome(params.tokenBundle);
-  const env = buildCodexEnv(codexHome);
+  const runtime = resolveActiveCodexRuntime(codexHome);
+  const env = prependRuntimePath(buildCodexEnv(codexHome), runtime.pathDirectories);
   const personalityConfig = mapPersonalityConfig(params.personality);
 
   const codex = new Codex({
+    codexPathOverride: runtime.executablePath,
     env,
     config: personalityConfig,
   });

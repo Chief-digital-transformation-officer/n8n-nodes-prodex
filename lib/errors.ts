@@ -28,9 +28,31 @@ export class SkillCliInstallError extends Error {
   stderr: string;
   exitCode: number;
 
-  constructor(message: string, details: { command: string; stdout: string; stderr: string; exitCode: number }) {
+  constructor(
+    message: string,
+    details: { command: string; stdout: string; stderr: string; exitCode: number },
+  ) {
     super(message);
     this.name = 'SkillCliInstallError';
+    this.command = details.command;
+    this.stdout = details.stdout;
+    this.stderr = details.stderr;
+    this.exitCode = details.exitCode;
+  }
+}
+
+export class CodexRuntimeInstallError extends Error {
+  command: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+
+  constructor(
+    message: string,
+    details: { command: string; stdout: string; stderr: string; exitCode: number },
+  ) {
+    super(message);
+    this.name = 'CodexRuntimeInstallError';
     this.command = details.command;
     this.stdout = details.stdout;
     this.stderr = details.stderr;

@@ -3,7 +3,14 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { buildAuthJson, buildCodexEnv, createCodexHome, hasAgentIdentity, hasCompleteCodexAuth, resolveCodexHome } from '../../lib/auth/codexEnv';
+import {
+  buildAuthJson,
+  buildCodexEnv,
+  createCodexHome,
+  hasAgentIdentity,
+  hasCompleteCodexAuth,
+  resolveCodexHome,
+} from '../../lib/auth/codexEnv';
 import { isValidJwt } from '../../lib/auth/tokenStore';
 
 const sampleJwt =
@@ -64,8 +71,7 @@ describe('codexEnv', () => {
     process.env.N8N_USER_FOLDER = n8nFolder;
     const codexHome = join(n8nFolder, 'codex');
     mkdirSync(codexHome, { recursive: true });
-    const agentJwt =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZ2VudCJ9.x';
+    const agentJwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZ2VudCJ9.x';
 
     writeFileSync(
       join(codexHome, 'auth.json'),
@@ -168,7 +174,8 @@ describe('codexEnv', () => {
     const env = buildCodexEnv('/tmp/codex-home');
     expect(env.CODEX_HOME).toBe('/tmp/codex-home');
     expect(env.CODEX_ACCESS_TOKEN).toBeUndefined();
-    expect(env.PATH).toBe('/usr/bin');
+    expect(env.PATH).toContain('node_modules/.bin');
+    expect(env.PATH).toContain('/usr/bin');
 
     delete process.env.CODEX_ACCESS_TOKEN;
   });

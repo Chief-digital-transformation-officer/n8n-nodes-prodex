@@ -1,14 +1,27 @@
-import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync, closeSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+  closeSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 import { CodexAuthSetupError } from '../errors';
+import { prependRuntimePath, resolveActiveCodexRuntime } from '../codex/manageCodexCli';
 import type { CodexAuthJson, CodexCredentialValues } from '../types/codex';
-import { hasAgentIdentity, hasCompleteCodexAuth, hasRunnableAuthTokens, readAuthJson, resolveCodexHome } from './codexEnv';
+import {
+  buildCodexEnv,
+  hasAgentIdentity,
+  hasCompleteCodexAuth,
+  hasRunnableAuthTokens,
+  readAuthJson,
+  resolveCodexHome,
+} from './codexEnv';
 import { decodeJwtExpiry, extractAccountId, isValidJwt } from './tokenStore';
-
-const nodeRequire = createRequire(__filename);
 
 const CODEX_DEVICE_URL = 'https://auth.openai.com/codex/device';
 const DEVICE_LOGIN_TIMEOUT_MS = 60_000;
@@ -76,7 +89,9 @@ export function stripAnsi(text: string): string {
   return text.replace(/\u001b\[[0-9;]*m/g, '');
 }
 
-export function parseDeviceLoginOutput(output: string): { userCode: string; verificationUrl: string } | null {
+export function parseDeviceLoginOutput(
+  output: string,
+): { userCode: string; verificationUrl: string } | null {
   const text = stripAnsi(output);
   const codeMatch = text.match(/\b([A-Z0-9]{3,8}-[A-Z0-9]{3,8})\b/);
   if (!codeMatch) {
@@ -89,14 +104,6 @@ export function parseDeviceLoginOutput(output: string): { userCode: string; veri
   };
 }
 
-function resolveCodexScript(): string | null {
-  try {
-    return nodeRequire.resolve('@openai/codex/bin/codex.js');
-  } catch {
-    return null;
-  }
-}
-
 export interface DeviceLoginInstructions {
   verificationUrl: string;
   userCode: string;
@@ -106,19 +113,17 @@ export interface DeviceLoginInstructions {
 
 export async function startDeviceLogin(): Promise<DeviceLoginInstructions> {
   const codexHome = resolveCodexHome();
-  const codexScript = resolveCodexScript();
+  const runtime = resolveActiveCodexRuntime(codexHome);
   mkdirSync(codexHome, { recursive: true });
 
   const logPath = loginLogPath(codexHome);
   writeFileSync(logPath, `Starting Codex device login at ${new Date().toISOString()}\n`, 'utf8');
   const logFd = openSync(logPath, 'a');
 
-  const args = codexScript ? [codexScript, 'login', '--device-auth'] : ['login', '--device-auth'];
-  const command = codexScript ? process.execPath : 'codex';
-  const child = spawn(command, args, {
-    env: { ...process.env, CODEX_HOME: codexHome },
+  const child = spawn(runtime.executablePath, ['login', '--device-auth'], {
+    env: prependRuntimePath(buildCodexEnv(codexHome), runtime.pathDirectories),
     stdio: ['ignore', logFd, logFd],
-    shell: !codexScript,
+    shell: false,
     detached: true,
   });
   closeSync(logFd);
@@ -129,7 +134,9 @@ export async function startDeviceLogin(): Promise<DeviceLoginInstructions> {
   }
 
   child.on('close', (code) => {
-    writeFileSync(logPath, `Codex login process exited with code ${code ?? 'unknown'}\n`, { flag: 'a' });
+    writeFileSync(logPath, `Codex login process exited with code ${code ?? 'unknown'}\n`, {
+      flag: 'a',
+    });
     clearLoginPid(codexHome);
   });
 
@@ -146,18 +153,19 @@ export async function startDeviceLogin(): Promise<DeviceLoginInstructions> {
         verificationUrl: parsed.verificationUrl,
         userCode: parsed.userCode,
         codexHome,
-        instructions:
-          `Open ${parsed.verificationUrl}, enter code ${parsed.userCode}, sign in with ChatGPT, then run "Wait for Login Complete". Login log: ${logPath}`,
+        instructions: `Open ${parsed.verificationUrl}, enter code ${parsed.userCode}, sign in with ChatGPT, then run "Wait for Login Complete". Login log: ${logPath}`,
       };
     }
 
     await sleep(500);
   }
 
-  const partialLog = existsSync(logPath) ? stripAnsi(readFileSync(logPath, 'utf8')).slice(-400) : '';
+  const partialLog = existsSync(logPath)
+    ? stripAnsi(readFileSync(logPath, 'utf8')).slice(-400)
+    : '';
   throw new CodexAuthSetupError(
     `Timed out waiting for Codex device login output after ${DEVICE_LOGIN_TIMEOUT_MS / 1000}s. ` +
-      `Ensure @openai/codex is installed. Log: ${logPath}. Partial output: ${partialLog}`,
+      `Ensure @openai/codex is installed or run ProDex Setup → Install / Update Codex. Log: ${logPath}. Partial output: ${partialLog}`,
   );
 }
 
@@ -254,7 +262,9 @@ function authJsonToCredential(authJson: CodexAuthJson): CodexCredentialValues {
       tokens.account_id ||
       extractAccountId(tokens.access_token) ||
       extractAccountId(tokens.id_token),
-    expiresAt: new Date((decodeJwtExpiry(tokens.access_token) ?? Math.floor(Date.now() / 1000) + 3600) * 1000).toISOString(),
+    expiresAt: new Date(
+      (decodeJwtExpiry(tokens.access_token) ?? Math.floor(Date.now() / 1000) + 3600) * 1000,
+    ).toISOString(),
   };
 }
 

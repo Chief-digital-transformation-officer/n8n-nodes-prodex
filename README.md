@@ -50,10 +50,13 @@ This project is built and maintained by **[Nils](https://nils.proday.in)**.
 - **ProDex** root node — prompt in, agent result out
 - **ProDex Chat Model** for n8n **AI Agent** (connect to Chat Model input)
 - **ProDex Setup** node for browser login and credential export inside n8n
+- **Codex runtime manager** — inspect, install, or update to `latest` or an exact CLI version from the setup node
 - **Token refresh** at runtime when access tokens expire
 - Automatic Codex data directory under n8n's own user folder (no manual env vars)
 - Thread modes: new, continue, resume
-- **Skills system** — install `SKILL.md` files and reference them in system prompts (static + dynamic)
+- **n8n-as-code included** — the `n8nac` CLI is installed with the node and exposed to every Codex run
+- **Preinstalled n8n skill** — `n8n-architect` from n8n-as-code is available and selected by default
+- **Skills system** — install additional `SKILL.md` files and reference them in system prompts (static + dynamic)
 
 ---
 
@@ -68,6 +71,7 @@ This package uses Codex through the official `@openai/codex-sdk`, which spawns t
 - Self-hosted n8n (not n8n Cloud)
 - Node.js 18+
 - `@openai/codex` CLI binaries (installed automatically as a dependency on supported platforms)
+- A writable n8n user folder if you want setup-node-managed Codex updates
 
 ---
 
@@ -100,7 +104,7 @@ export N8N_CUSTOM_EXTENSIONS="/absolute/path/to/n8n-nodes-prodex"
 n8n start
 ```
 
-The package directory must contain installed dependencies (`@openai/codex`, `@openai/codex-sdk`). Running `npm install` in the package folder satisfies that requirement.
+The package directory must contain installed dependencies (`@openai/codex`, `@openai/codex-sdk`, and `n8nac`). Running `npm install` in the package folder satisfies that requirement.
 
 For Docker, mount the built package and set `N8N_CUSTOM_EXTENSIONS`. See [`docker/Dockerfile.n8n-codex`](docker/Dockerfile.n8n-codex).
 
@@ -110,21 +114,29 @@ For Docker, mount the built package and set `N8N_CUSTOM_EXTENSIONS`. See [`docke
 
 No CLI or manual environment variables are required for users.
 
-### Step 1: Start device login
+### Step 1: Verify or choose the Codex runtime
 
 1. Create a workflow with **Manual Trigger** → **ProDex Setup**
-2. Set operation to **Start Device Login**
-3. Execute the workflow
-4. Open the returned `verificationUrl` and enter `userCode` in your browser
-5. Sign in with your Codex account
+2. Run **Runtime Status**
+3. Confirm the output includes `activeCodexVersion`, `n8nacVersion`, and the `n8n-architect` preinstalled skill
+4. Optional: choose **Install / Update Codex**, enter `latest` or an exact version such as `0.145.0`, and execute
 
-### Step 2: Wait for login complete
+Managed versions are installed under `{codexHome}/runtime` and override the version bundled with this package for new login and agent runs. The community-node installation itself is not modified, and no n8n restart is required.
+
+### Step 2: Start device login
+
+1. Set operation to **Start Device Login**
+2. Execute the workflow
+3. Open the returned `verificationUrl` and enter `userCode` in your browser
+4. Sign in with your Codex account
+
+### Step 3: Wait for login complete
 
 1. Change the setup node operation to **Wait for Login Complete**
 2. Execute again after browser login completes
 3. Confirm the output shows `hasCompleteAuth: true`
 
-### Step 3: Run Codex
+### Step 4: Run Codex
 
 Add the **ProDex** node and run your workflow. **Do not select credentials** — leave **Use n8n Credentials** off. Auth is read automatically from `auth.json` on disk.
 
@@ -139,12 +151,12 @@ Only needed if you prefer n8n Credentials over disk auth (e.g. multi-worker setu
 3. On the ProDex node, enable **Use n8n Credentials** and select that credential
 
 | Credential field | JSON field from setup node |
-|---|---|
-| Access Token | `accessToken` |
-| Refresh Token | `refreshToken` |
-| ID Token | `idToken` |
-| Account ID | `accountId` |
-| Expires At | `expiresAt` |
+| ---------------- | -------------------------- |
+| Access Token     | `accessToken`              |
+| Refresh Token    | `refreshToken`             |
+| ID Token         | `idToken`                  |
+| Account ID       | `accountId`                |
+| Expires At       | `expiresAt`                |
 
 ---
 
@@ -173,18 +185,21 @@ ProDex Chat Model ──────→ Chat Model (on AI Agent)
 
 ---
 
-## Skills (install + system prompt)
+## n8n-as-code and skills
 
 Skills are stored as `SKILL.md` files under `{codexHome}/skills/{skill-name}/` (Cursor/Codex-compatible format).
 
+The package pins the published [`n8nac` CLI](https://github.com/EtienneLescot/n8n-as-code/tree/main/packages/cli) as a runtime dependency. Its executable directory is prepended to `PATH` for Codex, so the agent can run `n8nac` without downloading it at execution time.
+
+The [`n8n-architect` skill](https://github.com/EtienneLescot/n8n-as-code/tree/main/skills) is copied from the installed n8n-as-code package into `codexHome/skills` automatically. It is refreshed when the packaged source changes and is selected by default in both **ProDex** and **ProDex Chat Model**.
+
 ### Install a skill
 
-Use **ProDex** → **Install Skill** (install from GitHub via `npx skills add`), or paste skill markdown manually in older flows.
+Use **ProDex** → **Install Skill** to install another skill from GitHub via `npx skills add`.
 
 1. **ProDex** → **Install Skill**
-2. Set **Skill Name** (e.g. `release-notes`)
-3. Paste full **Skill Markdown** (YAML frontmatter + body)
-4. Execute
+2. Set a repository URL and **Skill Name** (the default points to n8n-as-code / `n8n-architect`)
+3. Execute
 
 ### List installed skills
 
@@ -192,10 +207,10 @@ Use **ProDex** → **Install Skill** (install from GitHub via `npx skills add`),
 
 ### Use skills in ProDex
 
-| Field | Purpose |
-|---|---|
-| **System Prompt** | Static instructions on every run |
-| **Static Skills** | Comma/newline skill names always loaded (e.g. `release-notes, lint-fix`) |
+| Field              | Purpose                                                                   |
+| ------------------ | ------------------------------------------------------------------------- |
+| **System Prompt**  | Static instructions on every run                                          |
+| **Skills**         | Installed skills always loaded; `n8n-architect` is selected by default    |
 | **Dynamic Skills** | Expression per item — default `={{ $json.skillNames \|\| $json.skills }}` |
 
 Dynamic skills accept:
@@ -217,6 +232,8 @@ Output includes `appliedSkills` so you can verify what was loaded.
 5. Choose model, reasoning effort, sandbox, and thread mode
 6. Execute
 
+The current Codex SDK reasoning values exposed by both nodes are `minimal`, `low`, `medium`, `high`, and `xhigh`. `max` and `ultra` are not CLI SDK thread-option values, so they are intentionally not offered here.
+
 ### Output fields
 
 ```json
@@ -225,7 +242,7 @@ Output includes `appliedSkills` so you can verify what was loaded.
   "threadId": "thread_...",
   "items": [],
   "usage": { "inputTokens": 0, "outputTokens": 0, "totalTokens": 0 },
-  "model": "gpt-5.4",
+  "model": "gpt-5.6-sol",
   "finishReason": "stop"
 }
 ```
@@ -245,7 +262,7 @@ Output includes `appliedSkills` so you can verify what was loaded.
 3. Create the **ProDex Auth API** credential from the exported JSON
 4. Build workflow: **Manual Trigger** → **ProDex** → **Set**
 5. Prompt: `Reply with the single word OK.`
-6. Model: `gpt-5.4`, Sandbox: `Read Only`, Thread Mode: `New Thread`
+6. Model: `gpt-5.6-sol`, Sandbox: `Read Only`, Thread Mode: `New Thread`
 7. Execute and verify `output` contains `OK` and `threadId` is populated
 
 ---
@@ -270,7 +287,7 @@ docker build -f docker/Dockerfile.n8n-codex -t n8n-codex .
 docker run -p 5678:5678 -e N8N_CUSTOM_EXTENSIONS=/custom-nodes n8n-codex
 ```
 
-Codex runtime files are stored automatically under n8n's user folder (for example `/home/node/.n8n/codex` in the official Docker image).
+Codex runtime files, managed CLI versions, and preinstalled skills are stored automatically under n8n's user folder (for example `/home/node/.n8n/codex` in the official Docker image). Mount that folder as a persistent volume if runtime updates and login should survive container replacement.
 
 ---
 

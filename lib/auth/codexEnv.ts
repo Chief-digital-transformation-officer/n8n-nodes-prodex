@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir, tmpdir } from 'os';
-import { join } from 'path';
+import { delimiter, join } from 'path';
 
+import { resolveN8nacBinDirectory } from '../codex/manageCodexCli';
 import { CodexAuthSetupError } from '../errors';
 import type { CodexAuthJson, CodexTokenBundle } from '../types/codex';
 import { decodeJwtExpiry, extractAccountId, isValidJwt } from './tokenStore';
@@ -175,7 +176,10 @@ export function assertRunnableTokenBundle(bundle: CodexTokenBundle): void {
   }
 }
 
-export function updateAuthJsonTokens(bundle: CodexTokenBundle, codexHome = resolveCodexHome()): string {
+export function updateAuthJsonTokens(
+  bundle: CodexTokenBundle,
+  codexHome = resolveCodexHome(),
+): string {
   assertRunnableTokenBundle(bundle);
 
   mkdirSync(codexHome, { recursive: true, mode: 0o700 });
@@ -224,14 +228,10 @@ export function createCodexHome(bundle: CodexTokenBundle): string {
 
   mkdirSync(codexHome, { recursive: true, mode: 0o700 });
   const existing = readAuthJson(codexHome);
-  writeFileSync(
-    authPath,
-    JSON.stringify(mergeAuthJson(existing, bundle), null, 2),
-    {
-      encoding: 'utf8',
-      mode: 0o600,
-    },
-  );
+  writeFileSync(authPath, JSON.stringify(mergeAuthJson(existing, bundle), null, 2), {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
   return codexHome;
 }
 
@@ -244,6 +244,15 @@ export function buildCodexEnv(codexHome: string): Record<string, string> {
   }
 
   env.CODEX_HOME = codexHome;
+  const pathKey =
+    process.platform === 'win32'
+      ? (Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'Path')
+      : 'PATH';
+  const n8nacBinDirectory = resolveN8nacBinDirectory();
+  const pathEntries = (env[pathKey] ?? '')
+    .split(delimiter)
+    .filter((entry) => entry && entry !== n8nacBinDirectory);
+  env[pathKey] = [n8nacBinDirectory, ...pathEntries].join(delimiter);
   // CODEX_ACCESS_TOKEN is for enterprise Codex access / agent-identity tokens, not
   // OAuth access tokens from ChatGPT device login. Passing OAuth tokens here makes
   // codex exec fail with "agent identity JWT payload is not valid JSON".

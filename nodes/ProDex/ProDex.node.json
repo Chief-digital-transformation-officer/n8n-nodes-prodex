@@ -1,6 +1,6 @@
 {
   "node": "n8n-nodes-prodex.prodex",
-  "nodeVersion": "1",
+  "nodeVersion": "2.0",
   "codexVersion": "1.0",
   "categories": ["AI"],
   "resources": {

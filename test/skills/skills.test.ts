@@ -3,8 +3,17 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { installSkill, listInstalledSkills, parseSkillMarkdown } from '../../lib/skills/skillStore';
-import { buildAgentPrompt, parseStaticSkillNames, resolveSkillNames } from '../../lib/skills/buildAgentPrompt';
+import {
+  ensurePreinstalledSkills,
+  installSkill,
+  listInstalledSkills,
+  parseSkillMarkdown,
+} from '../../lib/skills/skillStore';
+import {
+  buildAgentPrompt,
+  parseStaticSkillNames,
+  resolveSkillNames,
+} from '../../lib/skills/buildAgentPrompt';
 
 describe('skillStore', () => {
   const codexHome = mkdtempSync(join(tmpdir(), 'codex-skills-'));
@@ -36,6 +45,18 @@ description: Demo skill
     expect(skills).toHaveLength(1);
     expect(skills[0].name).toBe('release-notes');
     expect(readFileSync(skills[0].path, 'utf8')).toContain('Summarize git diff');
+  });
+
+  it('preinstalls the n8n-as-code architect skill idempotently', () => {
+    const first = ensurePreinstalledSkills(codexHome);
+    const second = ensurePreinstalledSkills(codexHome);
+    const skill = listInstalledSkills(codexHome).find((entry) => entry.name === 'n8n-architect');
+
+    expect(first[0].changed).toBe(true);
+    expect(second[0].changed).toBe(false);
+    expect(skill?.description).toContain('n8n');
+    expect(readFileSync(skill!.path, 'utf8')).toContain('n8nac');
+    expect(readFileSync(skill!.path, 'utf8')).not.toContain('{{N8NAC_CMD}}');
   });
 });
 

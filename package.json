@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-prodex",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Self-hosted n8n ProDex node via ChatGPT subscription device-code auth",
   "license": "MIT",
   "homepage": "https://prodex.proday.in",
@@ -45,8 +45,9 @@
   ],
   "dependencies": {
     "@n8n/ai-node-sdk": "^0.17.2",
-    "@openai/codex": "0.142.1",
-    "@openai/codex-sdk": "0.142.1"
+    "@openai/codex": "0.145.0",
+    "@openai/codex-sdk": "0.145.0",
+    "n8nac": "2.4.1"
   },
   "n8n": {
     "n8nNodesApiVersion": 1,
