@@ -54,6 +54,33 @@ export class SkillCliInstallError extends Error {
   }
 }
 
+export class PackageCommandError extends Error {
+  command: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  phase: 'install' | 'verify' | 'check';
+
+  constructor(
+    message: string,
+    details: {
+      command: string;
+      stdout: string;
+      stderr: string;
+      exitCode: number;
+      phase: 'install' | 'verify' | 'check';
+    },
+  ) {
+    super(message);
+    this.name = 'PackageCommandError';
+    this.command = details.command;
+    this.stdout = details.stdout;
+    this.stderr = details.stderr;
+    this.exitCode = details.exitCode;
+    this.phase = details.phase;
+  }
+}
+
 export class CodexRuntimeInstallError extends Error {
   command: string;
   stdout: string;

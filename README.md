@@ -59,6 +59,7 @@ This project is built and maintained by **[Nils](https://nils.proday.in)**.
 - **Native n8n management connection** — one encrypted n8n API credential automatically authenticates workflow and Data Tables tooling
 - **Native Data Tables CLI** — list/create/rename/delete tables, manage columns, and read/insert/update/upsert/delete rows
 - **Skills system** — install additional `SKILL.md` files and reference them in system prompts (static + dynamic)
+- **Persistent package environment** — install and verify Python, npm, and other Linux tooling from free-form shell commands inside n8n
 
 ---
 
@@ -229,6 +230,28 @@ Use **ProDex** → **Install Skill** to install another skill from GitHub via `n
 ### List installed skills
 
 **ProDex** → **List Installed Skills** — returns `skillNames` you can copy into the ProDex node.
+
+### Install skill dependencies and other packages
+
+Use **ProDex** → **Install Packages** to run trusted, multiline shell commands with the same OS permissions as the n8n process. Add **Verification Commands** to confirm imports or executable versions in the same execution.
+
+```sh
+python3 -m pip install requests pypdf
+npm install -g prettier
+```
+
+Example verification:
+
+```sh
+python3 -c "import requests, pypdf; print(requests.__version__, pypdf.__version__)"
+prettier --version
+```
+
+Use **ProDex** → **Check Installed Packages** later to run checks such as `python3 -m pip list`, `npm list -g --depth=0`, imports, or `command --version` calls without running an installation block.
+
+User-level dependency locations are stored under `{codexHome}/dependencies` and added to `PATH` and the relevant package-manager environment variables for every standalone ProDex and ProDex Chat Model run. In particular, plain `pip install` from **Install Packages** is redirected to the persistent Python user base, and global npm installs use the persistent npm prefix. The same prefix exposes `lib`, `lib64`, `include`, pkg-config, and CMake paths for user-space native libraries. Mount the n8n user folder as a volume to preserve these dependencies across container replacement.
+
+> **Security and container note:** free-form commands are equivalent to shell access as the n8n OS user. Use only trusted workflow inputs. Commands such as `apt-get`, `apk`, or `dnf` require the necessary OS permissions, and system-package changes survive only when the underlying host/container filesystem does. For reproducible system libraries, bake them into the n8n image; use this operation primarily for user-space skill dependencies.
 
 ### Use skills in ProDex
 

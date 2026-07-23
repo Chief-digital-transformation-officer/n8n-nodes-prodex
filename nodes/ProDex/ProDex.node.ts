@@ -21,12 +21,12 @@ import {
   CodexAuthRefreshError,
   CodexAuthSetupError,
   CodexRuntimeInstallError,
+  PackageCommandError,
   SkillCliInstallError,
 } from '../../lib/errors';
-import {
-  prepareN8nManagement,
-  type N8nApiCredentialValues,
-} from '../../lib/n8n/management';
+import { resolveDependencyEnvironment } from '../../lib/dependencies/dependencyEnvironment';
+import { installPackages, runPackageCommand } from '../../lib/dependencies/packageCommands';
+import { prepareN8nManagement, type N8nApiCredentialValues } from '../../lib/n8n/management';
 import { buildAgentPrompt, resolveSkillNames } from '../../lib/skills/buildAgentPrompt';
 import { installSkillViaCli } from '../../lib/skills/installSkillCli';
 import { getInstalledSkillLoadOptions } from '../../lib/skills/skillLoadOptions';
@@ -56,7 +56,7 @@ export class ProDex implements INodeType {
     subtitle:
       '={{$parameter["operation"] === "runAgent" || $parameter["operation"] === "invokeSkill" ? $parameter["model"] : $parameter["operation"]}}',
     description:
-      'Run OpenAI Codex, install skills, and manage your ProDex workspace. Complete ProDex Setup once before agent runs.',
+      'Run OpenAI Codex, install skills and packages, and manage your ProDex workspace. Complete ProDex Setup once before agent runs.',
     defaults: {
       name: 'ProDex',
     },
@@ -149,6 +149,18 @@ export class ProDex implements INodeType {
             action: 'List installed skills',
           },
           {
+            name: 'Install Packages',
+            value: 'installPackages',
+            description: 'Run free-form package installation commands in the ProDex environment',
+            action: 'Install packages',
+          },
+          {
+            name: 'Check Installed Packages',
+            value: 'checkPackages',
+            description: 'Run free-form commands that verify packages and system dependencies',
+            action: 'Check installed packages',
+          },
+          {
             name: 'Invoke Skill',
             value: 'invokeSkill',
             description: 'Run Codex with one or more installed skills applied',
@@ -235,6 +247,104 @@ export class ProDex implements INodeType {
         displayOptions: {
           show: {
             operation: ['installSkill'],
+          },
+        },
+      },
+      {
+        displayName:
+          'These commands run with the same OS permissions as n8n and can change the host or container. Use only trusted commands and self-hosted n8n. Python user packages and common language package-manager directories are persisted under codexHome/dependencies and automatically added to every Codex run. OS packages installed with apt/apk/dnf require sufficient permissions and persist only if your container or host filesystem persists them.',
+        name: 'packageCommandsNotice',
+        type: 'notice',
+        default: '',
+        displayOptions: {
+          show: {
+            operation: ['installPackages', 'checkPackages'],
+          },
+        },
+      },
+      {
+        displayName: 'Install Commands',
+        name: 'installCommands',
+        type: 'string',
+        typeOptions: {
+          rows: 10,
+        },
+        default: '',
+        placeholder:
+          'python3 -m pip install requests\nnpm install -g prettier\n# apt-get install -y imagemagick',
+        required: true,
+        description:
+          'One or more shell commands. Multiline scripts, pipes, variables, and package-manager commands are supported.',
+        displayOptions: {
+          show: {
+            operation: ['installPackages'],
+          },
+        },
+      },
+      {
+        displayName: 'Verification Commands',
+        name: 'verificationCommands',
+        type: 'string',
+        typeOptions: {
+          rows: 6,
+        },
+        default: '',
+        placeholder:
+          'python3 -c "import requests; print(requests.__version__)"\nprettier --version',
+        description:
+          'Optional commands run after installation. A non-zero exit code marks verification as failed.',
+        displayOptions: {
+          show: {
+            operation: ['installPackages'],
+          },
+        },
+      },
+      {
+        displayName: 'Check Commands',
+        name: 'checkCommands',
+        type: 'string',
+        typeOptions: {
+          rows: 10,
+        },
+        default:
+          'printf \'Persistent dependency home: %s\\n\' "$PRODEX_DEPENDENCIES_HOME"\nif command -v python3 >/dev/null 2>&1; then python3 -m pip list --user; fi\nif command -v npm >/dev/null 2>&1; then npm list -g --depth=0 || true; fi\nif command -v cargo >/dev/null 2>&1; then cargo install --list; fi\nif command -v gem >/dev/null 2>&1; then gem list; fi\nfind "$PRODEX_DEPENDENCIES_HOME/bin" -maxdepth 1 -type f -print',
+        placeholder:
+          'python3 -m pip list\nnpm list -g --depth=0\ncommand -v imagemagick || command -v convert',
+        required: true,
+        description:
+          'Read-only diagnostic commands to list packages, import libraries, or print executable versions.',
+        displayOptions: {
+          show: {
+            operation: ['checkPackages'],
+          },
+        },
+      },
+      {
+        displayName: 'Working Directory',
+        name: 'packageWorkingDirectory',
+        type: 'string',
+        default: '',
+        placeholder: 'Leave empty for codexHome, or use /path/to/a/skill',
+        description:
+          'Directory in which the commands run. Leave empty to use the persistent codexHome directory.',
+        displayOptions: {
+          show: {
+            operation: ['installPackages', 'checkPackages'],
+          },
+        },
+      },
+      {
+        displayName: 'Timeout (Seconds)',
+        name: 'packageTimeoutSeconds',
+        type: 'number',
+        default: 600,
+        typeOptions: {
+          minValue: 1,
+        },
+        description: 'Maximum time for each install, verification, or check command block',
+        displayOptions: {
+          show: {
+            operation: ['installPackages', 'checkPackages'],
           },
         },
       },
@@ -543,6 +653,88 @@ export class ProDex implements INodeType {
           continue;
         }
 
+        if (operation === 'installPackages') {
+          const codexHome = resolveCodexHome();
+          const installCommand = this.getNodeParameter('installCommands', itemIndex) as string;
+          const verificationCommand = this.getNodeParameter(
+            'verificationCommands',
+            itemIndex,
+            '',
+          ) as string;
+          const workingDirectory = this.getNodeParameter(
+            'packageWorkingDirectory',
+            itemIndex,
+            '',
+          ) as string;
+          const timeoutSeconds = this.getNodeParameter(
+            'packageTimeoutSeconds',
+            itemIndex,
+            600,
+          ) as number;
+          const result = await installPackages({
+            codexHome,
+            installCommand,
+            verificationCommand,
+            workingDirectory: workingDirectory || undefined,
+            timeoutMs: timeoutSeconds * 1000,
+          });
+
+          returnData.push({
+            json: {
+              operation: 'installPackages',
+              status: 'installed',
+              codexHome,
+              dependenciesHome: result.environment.home,
+              environment: result.environment,
+              install: result.install,
+              verification: result.verification,
+              verified: result.verified,
+              instructions: result.verification
+                ? 'Package commands completed and verification passed. The persistent dependency paths are available to new Codex runs.'
+                : 'Package commands completed. Add Verification Commands or use Check Installed Packages to confirm imports and executable versions.',
+            },
+            pairedItem: { item: itemIndex },
+          });
+          continue;
+        }
+
+        if (operation === 'checkPackages') {
+          const codexHome = resolveCodexHome();
+          const checkCommand = this.getNodeParameter('checkCommands', itemIndex) as string;
+          const workingDirectory = this.getNodeParameter(
+            'packageWorkingDirectory',
+            itemIndex,
+            '',
+          ) as string;
+          const timeoutSeconds = this.getNodeParameter(
+            'packageTimeoutSeconds',
+            itemIndex,
+            600,
+          ) as number;
+          const check = await runPackageCommand({
+            codexHome,
+            command: checkCommand,
+            phase: 'check',
+            workingDirectory: workingDirectory || undefined,
+            timeoutMs: timeoutSeconds * 1000,
+          });
+          const environment = resolveDependencyEnvironment(codexHome);
+
+          returnData.push({
+            json: {
+              operation: 'checkPackages',
+              status: 'verified',
+              codexHome,
+              dependenciesHome: environment.home,
+              environment,
+              check,
+              verified: true,
+            },
+            pairedItem: { item: itemIndex },
+          });
+          continue;
+        }
+
         if (operation === 'mcpTools' || operation === 'plugins') {
           returnData.push({
             json: {
@@ -731,6 +923,13 @@ export class ProDex implements INodeType {
         }
 
         if (error instanceof SkillCliInstallError) {
+          throw new NodeOperationError(this.getNode(), error.message, {
+            itemIndex,
+            description: error.stderr || error.stdout || error.command,
+          });
+        }
+
+        if (error instanceof PackageCommandError) {
           throw new NodeOperationError(this.getNode(), error.message, {
             itemIndex,
             description: error.stderr || error.stdout || error.command,

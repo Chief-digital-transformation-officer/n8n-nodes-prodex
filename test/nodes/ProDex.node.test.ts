@@ -26,6 +26,8 @@ describe('ProDex node', () => {
       'runAgent',
       'installSkill',
       'listSkills',
+      'installPackages',
+      'checkPackages',
       'invokeSkill',
       'mcpTools',
       'plugins',
@@ -39,6 +41,13 @@ describe('ProDex node', () => {
     ]);
     expect(node.description.credentials?.[1]?.name).toBe('prodexN8nApi');
     expect(node.description.credentials?.[1]?.required).toBe(false);
+    expect(
+      node.description.properties?.find((property) => property.name === 'installCommands')
+        ?.required,
+    ).toBe(true);
+    expect(
+      node.description.properties?.find((property) => property.name === 'checkCommands')?.required,
+    ).toBe(true);
   });
 
   it('uses current Codex models, reasoning enum, and preinstalled n8n skill', () => {

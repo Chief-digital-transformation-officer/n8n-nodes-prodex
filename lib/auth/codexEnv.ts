@@ -2,10 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir, tmpdir } from 'os';
 import { delimiter, join } from 'path';
 
-import {
-  ensureCodexCommandLaunchers,
-  resolveN8nacBinDirectory,
-} from '../codex/manageCodexCli';
+import { ensureCodexCommandLaunchers, resolveN8nacBinDirectory } from '../codex/manageCodexCli';
+import { applyDependencyEnvironment } from '../dependencies/dependencyEnvironment';
 import { CodexAuthSetupError } from '../errors';
 import type { CodexAuthJson, CodexTokenBundle } from '../types/codex';
 import { decodeJwtExpiry, extractAccountId, isValidJwt } from './tokenStore';
@@ -256,15 +254,13 @@ export function buildCodexEnv(codexHome: string): Record<string, string> {
   const commandBinDirectory = launchers.binDirectory;
   const pathEntries = (env[pathKey] ?? '')
     .split(delimiter)
-    .filter(
-      (entry) =>
-        entry && entry !== n8nacBinDirectory && entry !== commandBinDirectory,
-    );
+    .filter((entry) => entry && entry !== n8nacBinDirectory && entry !== commandBinDirectory);
   env[pathKey] = [commandBinDirectory, n8nacBinDirectory, ...pathEntries].join(delimiter);
   // These absolute paths are the authoritative commands for agent shells. PATH is
   // still populated for convenience, but some container/login shells rebuild it.
   env.N8NAC_CMD = launchers.n8nacCommand;
   env.N8N_DATA_TABLES_CMD = launchers.dataTablesCommand;
+  applyDependencyEnvironment(env, codexHome);
   // CODEX_ACCESS_TOKEN is for enterprise Codex access / agent-identity tokens, not
   // OAuth access tokens from ChatGPT device login. Passing OAuth tokens here makes
   // codex exec fail with "agent identity JWT payload is not valid JSON".

@@ -175,8 +175,16 @@ describe('codexEnv', () => {
     expect(env.CODEX_HOME).toBe('/tmp/codex-home');
     expect(env.CODEX_ACCESS_TOKEN).toBeUndefined();
     expect(env.PATH).toContain('/tmp/codex-home/bin');
+    expect(env.PATH).toContain('/tmp/codex-home/dependencies/python/bin');
     expect(env.PATH).toContain('node_modules/.bin');
     expect(env.PATH).toContain('/usr/bin');
+    expect(env.PRODEX_DEPENDENCIES_HOME).toBe('/tmp/codex-home/dependencies');
+    expect(env.PYTHONUSERBASE).toBe('/tmp/codex-home/dependencies/python');
+    expect(env.NPM_CONFIG_PREFIX).toBe('/tmp/codex-home/dependencies/npm');
+    expect(env.LD_LIBRARY_PATH).toContain('/tmp/codex-home/dependencies/lib');
+    expect(env.CPATH).toContain('/tmp/codex-home/dependencies/include');
+    expect(env.PKG_CONFIG_PATH).toContain('/tmp/codex-home/dependencies/lib/pkgconfig');
+    expect(env.CMAKE_PREFIX_PATH).toContain('/tmp/codex-home/dependencies');
     expect(env.N8NAC_CMD).toBe('/tmp/codex-home/bin/n8nac');
     expect(env.N8N_DATA_TABLES_CMD).toBe('/tmp/codex-home/bin/n8n-data-tables');
 
