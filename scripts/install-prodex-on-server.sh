@@ -11,7 +11,7 @@
 #   REPO_URL          git remote (default: this repo)
 #   REPO_DIR          source tree (default: auto)
 #   N8N_CONTAINER     main n8n container name
-#   N8N_STORAGE       host path mounted to /home/node/.n8n
+#   N8N_STORAGE       host path for n8n data (auto-detected from mounts/volumes)
 #   COMPOSE_DIR       directory with docker-compose.yml
 #   NODE_IMAGE        build image (default: node:24-alpine)
 #   SKIP_RESTART=1    install without restarting n8n
@@ -110,36 +110,148 @@ resolve_repo_dir() {
   REPO_DIR="$DEFAULT_CLONE_DIR"
 }
 
+n8n_data_dir_in_container() {
+  docker inspect "$1" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+    | sed -n 's/^N8N_USER_FOLDER=//p' | head -n1
+}
+
+inspect_n8n_mount() {
+  local container="$1"
+  local user_folder
+  user_folder="$(n8n_data_dir_in_container "$container")"
+  user_folder="${user_folder:-/home/node/.n8n}"
+  python3 - "$container" "$user_folder" <<'PY'
+import json, subprocess, sys
+
+container, user_folder = sys.argv[1], sys.argv[2]
+raw = subprocess.check_output(
+    ["docker", "inspect", container, "--format", "{{json .Mounts}}"],
+    text=True,
+)
+mounts = json.loads(raw or "[]")
+destinations = {user_folder, "/home/node/.n8n", "/data"}
+
+for mount in mounts:
+    dest = mount.get("Destination", "")
+    if dest not in destinations and not dest.rstrip("/").endswith(".n8n"):
+        continue
+    source = mount.get("Source", "")
+    if source:
+        print(source)
+        sys.exit(0)
+
+name = ""
+for mount in mounts:
+    dest = mount.get("Destination", "")
+    if dest in destinations or dest.rstrip("/").endswith(".n8n"):
+        name = mount.get("Name", "")
+        break
+
+if name:
+    raw = subprocess.check_output(["docker", "volume", "inspect", name, "--format", "{{json .}}"], text=True)
+    data = json.loads(raw)
+    if isinstance(data, list):
+        data = data[0]
+    mountpoint = data.get("Mountpoint", "")
+    if mountpoint:
+        print(mountpoint)
+PY
+}
+
+is_n8n_app_container() {
+  local name="$1"
+  local image
+  image="$(docker inspect "$name" --format '{{.Config.Image}}' 2>/dev/null || true)"
+  echo "$image" | grep -qiE '(^|/)n8nio/n8n|/n8n:' || return 1
+  echo "$name" | grep -qiE 'worker|postgres|redis|traefik|mailhog|browserless' && return 1
+  return 0
+}
+
+n8n_container_score() {
+  local name="$1"
+  local score=0
+  if echo "$name" | grep -qi 'worker'; then
+    score=$((score - 100))
+  fi
+  if docker port "$name" 5678 >/dev/null 2>&1; then
+    score=$((score + 50))
+  fi
+  if [ -n "$(inspect_n8n_mount "$name" 2>/dev/null || true)" ]; then
+    score=$((score + 100))
+  fi
+  if echo "$name" | grep -qiE '(^|[-/])n8n([-.]|$)'; then
+    score=$((score + 10))
+  fi
+  printf '%s' "$score"
+}
+
+list_n8n_candidate_containers() {
+  local name
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    is_n8n_app_container "$name" || continue
+    printf '%s\n' "$name"
+  done < <(docker ps --format '{{.Names}}')
+}
+
+pick_n8n_container() {
+  local best="" best_score=-999 name score
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    score="$(n8n_container_score "$name")"
+    if [ "$score" -gt "$best_score" ]; then
+      best="$name"
+      best_score="$score"
+    fi
+  done < <(list_n8n_candidate_containers)
+  [ -n "$best" ] || return 1
+  printf '%s' "$best"
+}
+
 find_n8n_container() {
   if [ -n "${N8N_CONTAINER:-}" ]; then
     docker inspect "$N8N_CONTAINER" >/dev/null 2>&1 || die "Container not found: $N8N_CONTAINER"
     return 0
   fi
 
-  local name mount
-  while IFS= read -r name; do
-    [ -n "$name" ] || continue
-    mount="$(docker inspect "$name" --format '{{range .Mounts}}{{if eq .Destination "/home/node/.n8n"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)"
-    if [ -n "$mount" ]; then
-      N8N_CONTAINER="$name"
-      N8N_STORAGE="${N8N_STORAGE:-$mount}"
-      log "Found n8n container: $N8N_CONTAINER (storage: $N8N_STORAGE)"
-      return 0
-    fi
-  done < <(docker ps --format '{{.Names}}' | grep -E 'n8n' || true)
+  N8N_CONTAINER="$(pick_n8n_container || true)"
+  [ -n "$N8N_CONTAINER" ] || die "No running n8n container found (image n8nio/n8n). Set N8N_CONTAINER manually."
 
-  die "Could not find a running n8n container with /home/node/.n8n mount. Set N8N_CONTAINER and N8N_STORAGE."
+  local mount
+  mount="$(inspect_n8n_mount "$N8N_CONTAINER" 2>/dev/null || true)"
+  if [ -n "$mount" ]; then
+    N8N_STORAGE="${N8N_STORAGE:-$mount}"
+    log "Found n8n container: $N8N_CONTAINER (storage: $N8N_STORAGE)"
+  else
+    INSTALL_MODE="container"
+    log "Found n8n container: $N8N_CONTAINER (no host storage — install via docker cp)"
+  fi
 }
 
 resolve_n8n_storage() {
   find_n8n_container
-  if [ -z "${N8N_STORAGE:-}" ]; then
-    N8N_STORAGE="$(docker inspect "$N8N_CONTAINER" --format '{{range .Mounts}}{{if eq .Destination "/home/node/.n8n"}}{{.Source}}{{end}}{{end}}')"
+  N8N_DATA_DIR="$(n8n_data_dir_in_container "$N8N_CONTAINER")"
+  N8N_DATA_DIR="${N8N_DATA_DIR:-/home/node/.n8n}"
+  CONTAINER_NODES_DIR="$N8N_DATA_DIR/nodes"
+
+  if [ "${INSTALL_MODE:-host}" = "container" ]; then
+    docker exec -u node "$N8N_CONTAINER" sh -c "mkdir -p '$CONTAINER_NODES_DIR'"
+    return 0
   fi
-  [ -n "$N8N_STORAGE" ] || die "N8N storage path empty. Set N8N_STORAGE to the host folder mounted as /home/node/.n8n"
-  [ -d "$N8N_STORAGE" ] || die "N8N storage not a directory: $N8N_STORAGE"
-  NODES_DIR="$N8N_STORAGE/nodes"
-  mkdir -p "$NODES_DIR"
+
+  if [ -z "${N8N_STORAGE:-}" ]; then
+    N8N_STORAGE="$(inspect_n8n_mount "$N8N_CONTAINER" 2>/dev/null || true)"
+  fi
+  if [ -n "$N8N_STORAGE" ] && [ -d "$N8N_STORAGE" ]; then
+    NODES_DIR="$N8N_STORAGE/nodes"
+    mkdir -p "$NODES_DIR"
+    INSTALL_MODE="host"
+    return 0
+  fi
+
+  INSTALL_MODE="container"
+  log "Host storage unavailable — installing via docker cp into $CONTAINER_NODES_DIR"
+  docker exec -u node "$N8N_CONTAINER" sh -c "mkdir -p '$CONTAINER_NODES_DIR'"
 }
 
 resolve_compose_dir() {
@@ -150,13 +262,13 @@ resolve_compose_dir() {
 
   local wd
   wd="$(docker inspect "$N8N_CONTAINER" --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' 2>/dev/null || true)"
-  if [ -n "$wd" ] && [ -f "$wd/docker-compose.yml" ] || [ -f "$wd/docker-compose.yaml" ]; then
+  if [ -n "$wd" ] && { [ -f "$wd/docker-compose.yml" ] || [ -f "$wd/docker-compose.yaml" ]; }; then
     COMPOSE_DIR="$wd"
     log "Compose dir from container label: $COMPOSE_DIR"
     return 0
   fi
 
-  for candidate in /opt/n8n /opt/n8n-stack /root/n8n; do
+  for candidate in /opt/beget/n8n /opt/n8n /opt/n8n-stack /root/n8n; do
     if [ -f "$candidate/docker-compose.yml" ] || [ -f "$candidate/docker-compose.yaml" ]; then
       COMPOSE_DIR="$candidate"
       log "Compose dir guessed: $COMPOSE_DIR"
@@ -212,18 +324,33 @@ PY
 }
 
 install_into_n8n() {
-  local dest="$NODES_DIR/n8n-nodes-prodex-${VERSION}.tgz"
-  cp "$TGZ" "$dest"
-  n8n_node_uid_gid
-  chown "$N8N_UID:$N8N_GID" "$dest"
-  update_nodes_package_json
-  chown "$N8N_UID:$N8N_GID" "$NODES_DIR/package.json"
+  local tgz_name="n8n-nodes-prodex-${VERSION}.tgz"
+  local container_tgz="$CONTAINER_NODES_DIR/$tgz_name"
+  local container_pkg="$CONTAINER_NODES_DIR/package.json"
+  local container_mod="$CONTAINER_NODES_DIR/node_modules/n8n-nodes-prodex/package.json"
+
+  if [ "${INSTALL_MODE:-host}" = "host" ]; then
+    local dest="$NODES_DIR/$tgz_name"
+    cp "$TGZ" "$dest"
+    n8n_node_uid_gid
+    chown "$N8N_UID:$N8N_GID" "$dest"
+    update_nodes_package_json
+    chown "$N8N_UID:$N8N_GID" "$NODES_DIR/package.json"
+  else
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    NODES_DIR="$tmp_dir"
+    update_nodes_package_json
+    docker cp "$TGZ" "$N8N_CONTAINER:$container_tgz"
+    docker cp "$NODES_DIR/package.json" "$N8N_CONTAINER:$container_pkg"
+    rm -rf "$tmp_dir"
+  fi
 
   log "Installing into container $N8N_CONTAINER ..."
-  docker exec -u node "$N8N_CONTAINER" sh -c "cd /home/node/.n8n/nodes && npm install ./n8n-nodes-prodex-${VERSION}.tgz"
+  docker exec -u node "$N8N_CONTAINER" sh -c "cd '$CONTAINER_NODES_DIR' && npm install './$tgz_name'"
 
   docker exec -u node "$N8N_CONTAINER" node -e \
-    "const p=require('/home/node/.n8n/nodes/node_modules/n8n-nodes-prodex/package.json'); console.log('Installed ProDex', p.version);"
+    "const p=require('$container_mod'); console.log('Installed ProDex', p.version);"
 }
 
 restart_n8n() {
