@@ -193,8 +193,8 @@ is_n8n_app_container() {
   local name="$1"
   local image
   image="$(docker inspect "$name" --format '{{.Config.Image}}' 2>/dev/null || true)"
-  echo "$image" | grep -qiE '(^|/)n8nio/n8n|/n8n:' || return 1
   echo "$name" | grep -qiE 'worker|postgres|redis|traefik|mailhog|browserless' && return 1
+  echo "$name$image" | grep -qi 'n8n' || return 1
   return 0
 }
 
@@ -222,7 +222,7 @@ list_n8n_candidate_containers() {
     [ -n "$name" ] || continue
     is_n8n_app_container "$name" || continue
     printf '%s\n' "$name"
-  done < <(docker ps --format '{{.Names}}')
+  done < <(docker ps --format '{{.Names}}' | grep -i n8n || true)
 }
 
 pick_n8n_container() {
@@ -246,7 +246,7 @@ find_n8n_container() {
   fi
 
   N8N_CONTAINER="$(pick_n8n_container || true)"
-  [ -n "$N8N_CONTAINER" ] || die "No running n8n container found (image n8nio/n8n). Set N8N_CONTAINER manually."
+  [ -n "$N8N_CONTAINER" ] || die "No running n8n container found (docker ps | grep n8n). Set N8N_CONTAINER manually."
 
   local mount
   mount="$(inspect_n8n_mount "$N8N_CONTAINER" 2>/dev/null || true)"
