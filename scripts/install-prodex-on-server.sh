@@ -18,6 +18,7 @@
 #   NODE_IMAGE        build image (default: node:24-alpine)
 #   SKIP_RESTART=1    install without restarting n8n
 #   SKIP_BUILD=1      only reinstall existing tarball
+#   PRODEX_N8N_API_KEY  optional n8n API key for n8n-as-code workspace bootstrap
 
 set -eu
 
@@ -316,6 +317,189 @@ n8n_node_uid_gid() {
   N8N_GID="$(docker exec -u node "$N8N_CONTAINER" id -g 2>/dev/null || echo 1000)"
 }
 
+detect_n8n_base_url() {
+  python3 - "$N8N_CONTAINER" <<'PY'
+import subprocess, sys
+from urllib.parse import urlparse
+
+container = sys.argv[1]
+raw = subprocess.check_output(
+    ["docker", "inspect", container, "--format", "{{range .Config.Env}}{{println .}}{{end}}"],
+    text=True,
+)
+env = {}
+for line in raw.splitlines():
+    if "=" in line:
+        key, value = line.split("=", 1)
+        env[key] = value.strip()
+
+for key in ("PRODEX_N8N_BASE_URL", "WEBHOOK_URL", "N8N_EDITOR_BASE_URL"):
+    value = env.get(key, "").strip().rstrip("/")
+    if not value.startswith("http"):
+        continue
+    if key == "WEBHOOK_URL":
+        parsed = urlparse(value)
+        if parsed.scheme and parsed.netloc:
+            print(f"{parsed.scheme}://{parsed.netloc}")
+            sys.exit(0)
+    print(value)
+    sys.exit(0)
+
+protocol = env.get("N8N_PROTOCOL", "http").strip() or "http"
+host = env.get("N8N_HOST", "127.0.0.1").strip() or "127.0.0.1"
+port = env.get("N8N_PORT", "5678").strip() or "5678"
+if host in ("0.0.0.0", "::", ""):
+    host = "127.0.0.1"
+if port in ("80", "443") and protocol in ("http", "https"):
+    print(f"{protocol}://{host}")
+else:
+    print(f"{protocol}://{host}:{port}")
+PY
+}
+
+read_env_file_value() {
+  local file="$1" key="$2"
+  [ -f "$file" ] || return 0
+  python3 - "$file" "$key" <<'PY'
+import os, re, sys
+path, key = sys.argv[1], sys.argv[2]
+pattern = re.compile(rf"^{re.escape(key)}=(.*)$")
+with open(path, encoding="utf-8") as handle:
+    for line in handle:
+        match = pattern.match(line.strip())
+        if not match:
+            continue
+        value = match.group(1).strip()
+        if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+            value = value[1:-1]
+        print(value)
+        sys.exit(0)
+PY
+}
+
+ensure_env_file_line() {
+  local file="$1" key="$2" value="$3"
+  mkdir -p "$(dirname "$file")"
+  touch "$file"
+  if grep -q "^${key}=" "$file" 2>/dev/null; then
+    return 0
+  fi
+  printf '%s=%s\n' "$key" "$value" >>"$file"
+  log "Added ${key} to $file"
+}
+
+ensure_compose_prodex_env() {
+  [ -n "${COMPOSE_DIR:-}" ] || return 0
+  local env_file="$COMPOSE_DIR/.env"
+  local base_url
+  base_url="$(detect_n8n_base_url)"
+  ensure_env_file_line "$env_file" "PRODEX_N8N_BASE_URL" "$base_url"
+  ensure_env_file_line "$env_file" "N8N_USER_FOLDER" "$N8N_DATA_DIR"
+  if [ -z "$(read_env_file_value "$env_file" PRODEX_N8N_API_KEY)" ] && [ -z "${PRODEX_N8N_API_KEY:-}" ]; then
+    log "Tip: create an API key in n8n Settings → n8n API, then add PRODEX_N8N_API_KEY=... to $env_file and re-run this script."
+  fi
+}
+
+write_n8nac_config() {
+  local config_path="$1" base_url="$2"
+  python3 - "$config_path" "$base_url" <<'PY'
+import json, os, sys
+
+config_path, base_url = sys.argv[1], sys.argv[2].rstrip("/")
+config = {
+    "version": 4,
+    "activeEnvironmentId": "prodex-env",
+    "environmentTargets": [
+        {
+            "id": "prodex-target",
+            "name": "ProDex",
+            "kind": "external-instance",
+            "url": base_url,
+        }
+    ],
+    "environments": [
+        {
+            "id": "prodex-env",
+            "name": "ProDex",
+            "environmentTargetId": "prodex-target",
+            "projectId": "personal",
+            "projectName": "Personal",
+            "workflowsPath": "workflows",
+            "folderSync": False,
+        }
+    ],
+}
+os.makedirs(os.path.dirname(config_path), exist_ok=True)
+with open(config_path, "w", encoding="utf-8") as handle:
+    json.dump(config, handle, indent=2)
+    handle.write("\n")
+PY
+}
+
+resolve_prodex_api_key() {
+  if [ -n "${PRODEX_N8N_API_KEY:-}" ]; then
+    printf '%s' "$PRODEX_N8N_API_KEY"
+    return 0
+  fi
+  if [ -n "${COMPOSE_DIR:-}" ]; then
+    read_env_file_value "$COMPOSE_DIR/.env" PRODEX_N8N_API_KEY
+    return 0
+  fi
+  read_env_file_value "${N8N_STORAGE:-}/.prodex.env" PRODEX_N8N_API_KEY
+}
+
+store_n8nac_api_key() {
+  local api_key="$1"
+  [ -n "$api_key" ] || return 0
+  local workspace="$N8N_DATA_DIR/codex/n8n-as-code"
+  local n8nac_cli="$CONTAINER_NODES_DIR/node_modules/.bin/n8nac"
+  if printf '%s' "$api_key" | docker exec -i -u node -w "$workspace" "$N8N_CONTAINER" \
+    sh -c "test -x '$n8nac_cli' && '$n8nac_cli' env auth set ProDex --api-key-stdin"; then
+    log "Stored n8n API key for n8n-as-code workspace (ProDex environment)"
+  else
+    log "WARN: could not store API key via n8nac; add ProDex N8N API credential in n8n UI."
+  fi
+}
+
+bootstrap_n8n_as_code_workspace() {
+  local base_url api_key host_workspace container_workspace host_config
+  base_url="$(detect_n8n_base_url)"
+  container_workspace="$N8N_DATA_DIR/codex/n8n-as-code"
+  host_workspace="${N8N_STORAGE:-}/codex/n8n-as-code"
+  host_config="$host_workspace/n8nac-config.json"
+
+  if [ "${INSTALL_MODE:-host}" = "host" ]; then
+    mkdir -p "$host_workspace/workflows"
+    n8n_node_uid_gid
+    chown -R "$N8N_UID:$N8N_GID" "${N8N_STORAGE}/codex"
+  else
+    docker exec -u node "$N8N_CONTAINER" sh -c "mkdir -p '$container_workspace/workflows'"
+  fi
+
+  if [ "${INSTALL_MODE:-host}" = "host" ] && [ ! -f "$host_config" ]; then
+    write_n8nac_config "$host_config" "$base_url"
+    n8n_node_uid_gid
+    chown -R "$N8N_UID:$N8N_GID" "${N8N_STORAGE}/codex"
+    log "Created n8n-as-code workspace: $host_workspace (base URL: $base_url)"
+  elif [ "${INSTALL_MODE:-host}" = "host" ]; then
+    log "n8n-as-code workspace already exists: $host_config"
+  else
+    docker exec -u node "$N8N_CONTAINER" sh -c "[ -f '$container_workspace/n8nac-config.json' ]" \
+      && log "n8n-as-code workspace already exists in container" \
+      || {
+        local tmp_config
+        tmp_config="$(mktemp)"
+        write_n8nac_config "$tmp_config" "$base_url"
+        docker cp "$tmp_config" "$N8N_CONTAINER:$container_workspace/n8nac-config.json"
+        rm -f "$tmp_config"
+        log "Created n8n-as-code workspace in container (base URL: $base_url)"
+      }
+  fi
+
+  api_key="$(resolve_prodex_api_key || true)"
+  store_n8nac_api_key "$api_key"
+}
+
 read_version() {
   python3 -c 'import json; print(json.load(open("package.json"))["version"])'
 }
@@ -419,8 +603,11 @@ main() {
   resolve_compose_dir
   build_tarball
   install_into_n8n
+  bootstrap_n8n_as_code_workspace
+  ensure_compose_prodex_env
   restart_n8n
   log "Done. Open n8n → ProDex Setup → Runtime Status, then complete device login."
+  log "For n8n-as-code: create ProDex N8N API credential (base URL: $(detect_n8n_base_url)) or set PRODEX_N8N_API_KEY in compose .env and re-run."
 }
 
 main "$@"
