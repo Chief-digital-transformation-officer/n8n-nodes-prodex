@@ -4,12 +4,14 @@
 # Usage (from a git clone):
 #   sudo bash scripts/install-prodex-on-server.sh
 #
-# One-liner on a fresh server:
+# One-liner (install and update):
 #   curl -fsSL https://raw.githubusercontent.com/Chief-digital-transformation-officer/n8n-nodes-prodex/master/scripts/install-prodex-on-server.sh | sudo bash
 #
 # Environment overrides:
 #   REPO_URL          git remote (default: this repo)
-#   REPO_DIR          source tree (default: auto)
+#   REPO_BRANCH       git branch to track (default: master)
+#   REPO_DIR          source tree (skip auto-sync when set)
+#   SKIP_REPO_SYNC=1  use current checkout instead of syncing DEFAULT_CLONE_DIR
 #   N8N_CONTAINER     main n8n container name
 #   N8N_STORAGE       host path for n8n data (auto-detected from mounts/volumes)
 #   COMPOSE_DIR       directory with docker-compose.yml
@@ -20,6 +22,7 @@
 set -eu
 
 REPO_URL="${REPO_URL:-https://github.com/Chief-digital-transformation-officer/n8n-nodes-prodex.git}"
+REPO_BRANCH="${REPO_BRANCH:-master}"
 NODE_IMAGE="${NODE_IMAGE:-node:24-alpine}"
 DEFAULT_CLONE_DIR="${DEFAULT_CLONE_DIR:-/opt/n8n/n8n-nodes-prodex}"
 
@@ -83,30 +86,36 @@ script_dir() {
   cd "$(dirname "$0")" && pwd
 }
 
+sync_default_clone() {
+  if [ -d "$DEFAULT_CLONE_DIR/.git" ]; then
+    log "Updating $DEFAULT_CLONE_DIR (origin/$REPO_BRANCH) ..."
+    git -C "$DEFAULT_CLONE_DIR" fetch origin
+    git -C "$DEFAULT_CLONE_DIR" reset --hard "origin/$REPO_BRANCH"
+    return 0
+  fi
+
+  log "Cloning $REPO_URL -> $DEFAULT_CLONE_DIR"
+  mkdir -p "$(dirname "$DEFAULT_CLONE_DIR")"
+  git clone --branch "$REPO_BRANCH" "$REPO_URL" "$DEFAULT_CLONE_DIR"
+}
+
 resolve_repo_dir() {
   if [ -n "${REPO_DIR:-}" ]; then
     [ -f "$REPO_DIR/package.json" ] || die "REPO_DIR has no package.json: $REPO_DIR"
     return 0
   fi
 
-  local candidate
-  candidate="$(script_dir)/.."
-  if [ -f "$candidate/package.json" ] && grep -q '"name": "n8n-nodes-prodex"' "$candidate/package.json"; then
-    REPO_DIR="$(cd "$candidate" && pwd)"
-    return 0
+  if [ "${SKIP_REPO_SYNC:-0}" = "1" ]; then
+    local candidate
+    candidate="$(script_dir)/.."
+    if [ -f "$candidate/package.json" ] && grep -q '"name": "n8n-nodes-prodex"' "$candidate/package.json"; then
+      REPO_DIR="$(cd "$candidate" && pwd)"
+      return 0
+    fi
+    die "SKIP_REPO_SYNC=1 but script is not inside an n8n-nodes-prodex checkout"
   fi
 
-  if [ -d "$DEFAULT_CLONE_DIR/.git" ]; then
-    REPO_DIR="$DEFAULT_CLONE_DIR"
-    log "Using existing clone: $REPO_DIR"
-    git -C "$REPO_DIR" fetch origin
-    git -C "$REPO_DIR" reset --hard origin/master
-    return 0
-  fi
-
-  log "Cloning $REPO_URL -> $DEFAULT_CLONE_DIR"
-  mkdir -p "$(dirname "$DEFAULT_CLONE_DIR")"
-  git clone "$REPO_URL" "$DEFAULT_CLONE_DIR"
+  sync_default_clone
   REPO_DIR="$DEFAULT_CLONE_DIR"
 }
 
