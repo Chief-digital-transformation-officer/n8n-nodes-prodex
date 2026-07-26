@@ -110,6 +110,28 @@ resolve_repo_dir() {
   REPO_DIR="$DEFAULT_CLONE_DIR"
 }
 
+running_from_repo_script() {
+  local repo_script="$1"
+  local current="${BASH_SOURCE[0]:-$0}"
+  if [ ! -f "$current" ]; then
+    return 1
+  fi
+  [ "$(cd "$(dirname "$current")" && pwd -P)/$(basename "$current")" = "$(cd "$(dirname "$repo_script")" && pwd -P)/$(basename "$repo_script")" ]
+}
+
+reexec_from_repo_if_needed() {
+  local repo_script="$REPO_DIR/scripts/install-prodex-on-server.sh"
+  [ -f "$repo_script" ] || return 0
+  if [ "${PRODEX_INSTALL_REEXEC:-0}" = "1" ]; then
+    return 0
+  fi
+  if running_from_repo_script "$repo_script"; then
+    return 0
+  fi
+  log "Re-running from clone: $repo_script"
+  PRODEX_INSTALL_REEXEC=1 exec bash "$repo_script" "$@"
+}
+
 n8n_data_dir_in_container() {
   docker inspect "$1" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
     | sed -n 's/^N8N_USER_FOLDER=//p' | head -n1
@@ -381,6 +403,7 @@ main() {
   need_root
   ensure_prerequisites
   resolve_repo_dir
+  reexec_from_repo_if_needed "$@"
   cd "$REPO_DIR"
   log "Source: $REPO_DIR ($(git rev-parse --short HEAD) $(git log -1 --format=%s))"
   resolve_n8n_storage
